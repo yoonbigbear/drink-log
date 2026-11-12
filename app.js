@@ -186,7 +186,7 @@ function startApp() {
 }
 function stopApp() {
   stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.feedState = "idle";
-  stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; if (bigMap) { bigMap.remove(); bigMap = null; bigLayer = null; }
+  stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; S.follow = false; if (bigMap) { bigMap.remove(); bigMap = null; bigLayer = null; }
 }
 
 /* ───────────── 탭 ───────────── */
@@ -208,12 +208,9 @@ function renderBadge() {
 /* ───────────── 피드 ───────────── */
 async function loadFeed() {
   S.feedState = "loading"; if (S.tab === "feed") renderFeed();
-  const uids = [me(), ...S.following]; const chunks = [];
-  for (let i = 0; i < uids.length; i += 30) chunks.push(uids.slice(i, i + 30));
   try {
-    const snaps = await Promise.all(chunks.map(c => FS.getDocs(FS.query(col("posts"), FS.where("ownerUid", "in", c), FS.orderBy("when", "desc"), FS.limit(40)))));
-    const items = []; snaps.forEach(s => s.docs.forEach(d => items.push({ id: d.id, ...d.data() })));
-    items.sort((a, b) => (b.when || "").localeCompare(a.when || "")); S.feed = items.slice(0, 60);
+    const snap = await FS.getDocs(FS.query(col("posts"), FS.orderBy("when", "desc"), FS.limit(60)));
+    S.feed = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     await loadPeople(S.feed.map(p => p.ownerUid)); S.feedState = "ready"; setStatus("");
   } catch (e) { S.feedState = "error"; setStatus(errText(e)); }
   if (S.tab === "feed") renderFeed();
@@ -232,18 +229,19 @@ function postCard(p) {
     <div class="pfoot"><span>♥ ${p.likeCount || 0}</span><span>💬 ${p.commentCount || 0}</span></div></article>`;
 }
 function renderFeed() {
-  const el = $("#feedlist"); document.querySelectorAll("#feedbar [data-f]").forEach(b => b.classList.toggle("on", (b.dataset.f === "reco") === S.reco));
+  const el = $("#feedlist"); const mode = S.reco ? "reco" : S.follow ? "follow" : "all"; document.querySelectorAll("#feedbar [data-f]").forEach(b => b.classList.toggle("on", b.dataset.f === mode));
   if (S.feedState === "loading" && !S.feed.length) { el.innerHTML = `<div class="empty">불러오는 중…</div>`; return; }
-  const items = S.reco ? S.feed.filter(p => p.recommend) : S.feed;
+  const items = S.reco ? S.feed.filter(p => p.recommend) : S.follow ? S.feed.filter(p => p.ownerUid === me() || S.following.has(p.ownerUid)) : S.feed;
   if (!items.length) {
     el.innerHTML = S.reco ? `<div class="empty"><div class="big">👍</div>추천이 달린 글이 아직 없어요.</div>`
-      : `<div class="empty"><div class="big">🍻</div>피드가 비어 있어요.<br><b>🔎 사람 찾기</b>에서 멤버를 팔로우하거나,<br>내 기록을 멤버에게 공유해 보세요.</div>`;
+      : S.follow ? `<div class="empty"><div class="big">👥</div>팔로우한 멤버의 글이 아직 없어요.<br><b>🔎 사람 찾기</b>에서 멤버를 팔로우해 보세요.</div>`
+      : `<div class="empty"><div class="big">🍻</div>피드가 비어 있어요.<br>기록을 쓰고 <b>멤버에게 공유</b>하면 모든 멤버에게 보여요.</div>`;
     return;
   }
   el.innerHTML = items.map(postCard).join("");
 }
 $("#feedlist").addEventListener("click", e => { const c = e.target.closest(".post"); if (c) openPost(c.dataset.id); });
-$("#feedbar").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (b) { S.reco = b.dataset.f === "reco"; renderFeed(); } });
+$("#feedbar").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (b) { S.reco = b.dataset.f === "reco"; S.follow = b.dataset.f === "follow"; renderFeed(); } });
 $("#findpeople").onclick = () => nav(renderPeople);
 $("#qrchip").onclick = () => nav(renderQr);
 $("#refresh").onclick = () => { loadFeed(); toast("새로고침했어요"); };
@@ -571,7 +569,7 @@ function openForm(it, pre) {
     </fieldset>
     <fieldset><legend>공유</legend>
       <div class="seg" id="f-share"><button type="button" data-s="0" class="${F.share ? "" : "on"}">🔒 나만 보기</button><button type="button" data-s="1" class="${F.share ? "on" : ""}">👥 멤버에게 공유</button></div>
-      <div class="hint" id="f-sharehint">${F.share ? "공유하면 승인된 멤버에게 보이고, 나를 팔로우한 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."}</div>
+      <div class="hint" id="f-sharehint">${F.share ? "공유하면 승인된 모든 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."}</div>
       <div class="sharebox ${F.share ? "" : "hide"}" id="sharebox">
         <label class="opt"><input type="checkbox" id="f-reco" ${F.reco ? "checked" : ""}> 👍 이 술을 추천해요</label>
         <input class="inp" id="f-recoline" maxlength="80" value="${esc(d.recoLine)}" placeholder="추천 한마디 (예: 비 오는 날 혼술로 딱)">
@@ -595,7 +593,7 @@ function openForm(it, pre) {
   const addTag = () => { const v = $("#f-newtag").value.trim(); if (!v) return; $("#f-newtag").value = ""; F.tags.add(v); renderAromas(); };
   $("#f-addtag").onclick = addTag; $("#f-newtag").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } };
   $("#f-share").onclick = e => { const b = e.target.closest("[data-s]"); if (!b) return; F.share = b.dataset.s === "1";
-    document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); $("#f-sharehint").textContent = F.share ? "공유하면 승인된 멤버에게 보이고, 나를 팔로우한 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."; };
+    document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); $("#f-sharehint").textContent = F.share ? "공유하면 승인된 모든 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."; };
   if ($("#recent")) $("#recent").onclick = e => { const c = e.target.closest("[data-i]"); if (!c) return; const b = recent[+c.dataset.i];
     $("#f-place").value = b.place; $("#f-address").value = b.address || ""; $("#f-coord").value = b.mapLink || (b.lat != null ? `${b.lat}, ${b.lng}` : ""); updateCoordMsg(); syncPickMarker(); };
   $("#f-here").onclick = () => { if (!navigator.geolocation) return toast("이 브라우저는 위치를 지원하지 않아요"); toast("현재 위치를 찾는 중…");
