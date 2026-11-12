@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#15100c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>술로그</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="top">
+      <h1>술로그<small>마신 술 기록</small></h1>
+      <button id="account" class="btn small">로그인</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="s-total">–</b><span>기록</span></div>
+      <div class="stat"><b id="s-places">–</b><span>다녀온 곳</span></div>
+      <div class="stat"><b id="s-month">–</b><span>이번 달 지출</span></div>
+    </div>
+  </header>
+  <div id="status"></div>
+
+  <main id="v-list">
+    <div class="search">
+      <input id="q" type="search" placeholder="이름, 생산자, 장소, 향 검색" autocomplete="off">
+      <button id="qclear" class="hide" aria-label="지우기">✕</button>
+    </div>
+    <div class="chips scroll" id="catfilter"></div>
+    <div id="list"></div>
+  </main>
+  <main id="v-places" class="hide">
+    <div id="map" class="bigmap"></div>
+    <div id="places"></div>
+  </main>
+
+  <nav><div class="in">
+    <button class="tab on" data-v="list"><span class="ic">🍶</span>기록</button>
+    <button class="fab hide" id="fab" aria-label="새 기록">+</button>
+    <button class="tab" data-v="places"><span class="ic">📍</span>장소</button>
+  </div></nav>
+
+  <section class="sheet" id="sheet"></section>
+
+  <div class="modal" id="modal"><div class="box">
+    <p id="m-msg"></p>
+    <div class="row"><button class="btn" id="m-no">취소</button><button class="btn pri" id="m-yes">확인</button></div>
+  </div></div>
+  <div id="toast"></div>
+  <input type="file" id="file" accept="image/*" multiple class="hide">
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="categories.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

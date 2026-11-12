@@ -1,0 +1,34 @@
+rules_version = '2';
+// Firebase 프로젝트(flashcard-1476f) 전체 규칙. flashcard 와 술로그가 같은 프로젝트를 쓰므로
+// Firebase 콘솔 → Firestore → 규칙에는 이 파일 내용을 통째로 붙여 넣는다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwnerPath(uid) {
+      return uid == 'BZ9tnw3zjtc7Jh75G1SBOBR8ckM2';
+    }
+    function isSelf(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── flashcard ──
+    match /shares/{id} {
+      allow get: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['d', 'owner', 'created'])
+        && request.resource.data.d is string
+        && request.resource.data.d.size() < 300000
+        && request.resource.data.owner == request.auth.uid;
+    }
+    match /users/{uid}/{document=**} {
+      allow read: if isOwnerPath(uid) || isSelf(uid);
+      allow write: if isSelf(uid);
+    }
+
+    // ── 술로그: drinks/{uid}/logs, drinks/{uid}/photos ──
+    // 누구나 읽기, 쓰기는 소유자만.
+    match /drinks/{uid}/{document=**} {
+      allow read: if isOwnerPath(uid);
+      allow write: if isOwnerPath(uid) && isSelf(uid);
+    }
+  }
+}
