@@ -5,7 +5,7 @@
 
 - 호스팅: GitHub Pages (`main` 브랜치, 루트)
 - 로그인/DB/사진: Firebase Auth(구글) + Firestore — flashcard 와 같은 프로젝트(`flashcard-1476f`), **무료(Spark) 요금제로 동작** (사진도 Firestore 에 저장)
-- 지도: Leaflet + OpenStreetMap/CARTO 타일, 주소 검색은 Nominatim
+- 지도: 구글맵 링크·임베드(API 키 불필요), 주소 검색은 Nominatim
 
 ## 가입 방식 (승인제)
 1. 구글 로그인 후 아이디·닉네임을 정하고, **추천인 아이디를 검색**해 선택한 뒤 가입을 신청한다. (상태: 승인 대기)
