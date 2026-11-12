@@ -135,7 +135,7 @@ textarea.inp{min-height:68px;resize:vertical}
 .post{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden;cursor:pointer}
 .post:active{background:var(--panel2)}
 .phead{display:flex;gap:10px;align-items:center;padding:10px 12px}
-.pimg{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--panel2)}
+.pimg{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;image-rendering:auto;background:var(--panel2)}
 .pbody{padding:10px 12px 4px}
 .pfoot{display:flex;gap:16px;padding:6px 12px 12px;font-size:13.5px;color:var(--muted);align-items:center}
 .reco{display:inline-block;background:#2c3b1f;color:#b8e08a;border-radius:99px;padding:2px 9px;font-size:12px;margin-left:6px;vertical-align:middle;font-weight:500}

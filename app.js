@@ -1,7 +1,7 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122120";
-import { qrCanvas } from "./qr.js?v=11122120";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122120";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122124";
+import { qrCanvas } from "./qr.js?v=11122124";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122124";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -219,7 +219,7 @@ function postCard(p) {
   return `<article class="post" data-id="${esc(p.id)}">
     <div class="phead">${avatar(p.ownerUid)}<div style="min-width:0"><b>${esc(pname(p.ownerUid))}</b> <span class="dim sm">@${esc(phandle(p.ownerUid))}</span>
       <div class="dim sm">${esc(ago(p.when))}${p.place ? " · 📍 " + esc(p.place) : ""}</div></div></div>
-    ${p.thumb ? `<img class="pimg" src="${esc(p.thumb)}" alt="">` : ""}
+    ${p.thumb ? `<img class="pimg" ${p.photos?.[0]?.id ? `data-pid="${esc(p.photos[0].id)}"` : ""} src="${esc(p.thumb)}" alt="">` : ""}
     <div class="pbody"><div class="cname" style="white-space:normal">${c.icon} ${esc(p.name)}${p.recommend ? '<span class="reco">👍 추천</span>' : ""}</div>
       <div class="cmeta" style="white-space:normal">${esc([p.subtype || p.category, p.producer, p.aging].filter(Boolean).join(" · "))}</div>
       ${p.recoLine ? `<div style="margin-top:4px;font-size:14px">“${esc(p.recoLine)}”</div>` : ""}
@@ -238,6 +238,17 @@ function renderFeed() {
     return;
   }
   el.innerHTML = items.map(postCard).join("");
+  upgradePhotos(el);
+}
+// 피드의 작은 썸네일은 화면에 보일 때 원본 사진으로 바꿔 선명하게 보여준다.
+let photoIO = null;
+function upgradePhotos(root) {
+  const imgs = root.querySelectorAll("img.pimg[data-pid]"); if (!imgs.length) return;
+  const load = async img => { try { const d = await fullPhoto(img.dataset.pid); if (d && img.isConnected) img.src = d; } catch (e) {} };
+  if (!("IntersectionObserver" in window)) { imgs.forEach(load); return; }
+  if (photoIO) photoIO.disconnect();
+  photoIO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { photoIO.unobserve(e.target); load(e.target); } }), { rootMargin: "300px" });
+  imgs.forEach(i => photoIO.observe(i));
 }
 $("#feedlist").addEventListener("click", e => { const c = e.target.closest(".post"); if (c) openPost(c.dataset.id); });
 $("#feedbar").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (b) { S.reco = b.dataset.f === "reco"; S.follow = b.dataset.f === "follow"; renderFeed(); } });
