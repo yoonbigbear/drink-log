@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11130056";
-import { qrCanvas } from "./qr.js?v=11130056";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11130056";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11130107";
+import { qrCanvas } from "./qr.js?v=11130107";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11130107";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -12,7 +12,7 @@ const icon = it => (CAT[it.category] || CAT["기타"]).icon;
 const me = () => S.user.uid;
 
 const S = { user: null, member: null, started: false, tab: "feed",
-  mine: [], following: new Set(), invitees: [], feed: [], notifs: [], notifReady: false, feedState: "idle", reco: false, q: "", cat: "" };
+  mine: [], following: new Set(), invitees: [], feed: [], notifs: [], notifReady: false, chats: [], chatReady: false, feedState: "idle", reco: false, q: "", cat: "" };
 const people = new Map();           // uid -> member 문서 (없으면 null)
 let stopFns = [], F = null, D = null, stack = [];
 const sheet = $("#sheet");
@@ -200,11 +200,11 @@ function startApp() {
     S.invitees = snap.docs.map(d => ({ uid: d.id, ...d.data() })); S.invitees.forEach(p => people.set(p.uid, p));
     renderBadge(); renderMe();
   }, e => setStatus(errText(e))));
-  un.push(startNotifs(uid));
+  un.push(startNotifs(uid)); un.push(startChats(uid));
   stopFns = un; setTab(S.tab);
 }
 function stopApp() {
-  stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.notifs = []; S.notifReady = false; S.feedState = "idle";
+  stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.notifs = []; S.notifReady = false; S.chats = []; S.chatReady = false; stopChat(); S.feedState = "idle";
   stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; S.follow = false;
 }
 
@@ -219,10 +219,68 @@ function setTab(t) {
 document.querySelectorAll("nav .tab").forEach(b => b.onclick = () => setTab(b.dataset.v));
 $("#fab").onclick = () => openForm(null);
 $("#bell").onclick = () => nav(renderNotifs, { notif: true });
+$("#dm").onclick = () => nav(renderChats, { chats: true });
 function pendingList() { return S.invitees.filter(i => i.status === "pending"); }
+/* ───────────── 쪽지(DM) ───────────── */
+const chatIdOf = (a, b) => [a, b].sort().join("_");
+const otherOf = c => c.members.find(u => u !== me());
+const tms = t => t === 0 ? 0 : t?.toMillis ? t.toMillis() : (t ? +t : Date.now());
+const chatUnread = c => c.lastFrom && c.lastFrom !== me() && tms(c.lastAt) > tms(c.reads?.[me()] ?? 0);
+let chatUn = null, chatView = null;
+function stopChat() { if (chatUn) { chatUn(); chatUn = null; } chatView = null; }
+function startChats(uid) {
+  return FS.onSnapshot(FS.query(col("chats"), FS.where("members", "array-contains", uid)), async snap => {
+    S.chats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tms(b.lastAt) - tms(a.lastAt));
+    if (S.chatReady) {
+      const fresh = snap.docChanges().filter(c => c.type !== "removed" && !c.doc.metadata.hasPendingWrites && c.doc.data().lastFrom !== uid && !(chatView && chatView.id === c.doc.id));
+      if (fresh.length) { const d = fresh[fresh.length - 1].doc.data(); await loadPeople([d.lastFrom]); toast(`✉️ ${pname(d.lastFrom)}: ${String(d.lastText || "").slice(0, 30)}`); }
+    }
+    S.chatReady = true; renderBadge();
+    if (chatView && !chatUn && S.chats.some(c => c.id === chatView.id)) attachMessages();
+    if (chatView) markChatRead(); else if (stack.length && stack[stack.length - 1].chats) stack[stack.length - 1].fn();
+  }, e => setStatus(errText(e)));
+}
+function markChatRead() {
+  const c = S.chats.find(x => x.id === chatView?.id); if (c && chatUnread(c)) FS.updateDoc(ref("chats", c.id), { ["reads." + me()]: FS.serverTimestamp() }).catch(() => {});
+}
+async function renderChats() {
+  await loadPeople(S.chats.map(otherOf));
+  sheet.innerHTML = `${bar("쪽지", `<button class="btn" id="c-new">+ 새 쪽지</button>`)}<div class="sbody">${S.chats.length ? S.chats.map(c => { const o = otherOf(c); return `<div class="person ${chatUnread(c) ? "unread" : ""}" data-o="${esc(o)}" style="cursor:pointer">${avatar(o)}<div class="pi"><b>${esc(pname(o))}</b><span class="dim sm">${esc(c.lastFrom === me() ? "나: " : "")}${esc(String(c.lastText || "").slice(0, 40))}</span></div><span class="dim sm">${esc(ago(c.lastAt?.toDate ? c.lastAt.toDate().toISOString() : ""))}</span></div>`; }).join("")
+    : `<div class="empty"><div class="big">✉️</div>주고받은 쪽지가 없어요.<br>멤버 프로필에서 쪽지를 보낼 수 있어요.</div>`}</div>`;
+  $("#s-back").onclick = back; $("#c-new").onclick = () => nav(renderPeople);
+  sheet.querySelectorAll("[data-o]").forEach(el => el.onclick = () => nav(() => renderChat(el.dataset.o)));
+}
+async function renderChat(other) {
+  await loadPeople([other]); const id = chatIdOf(me(), other); chatView = { id, other };
+  sheet.innerHTML = `${bar(esc(pname(other)))}<div class="chatbox"><div class="msgs" id="msgs"><div class="hint">${S.chats.some(c => c.id === id) ? "불러오는 중…" : "첫 쪽지를 보내 보세요."}</div></div>
+    <form class="chatin" id="c-form"><textarea id="c-text" rows="1" maxlength="1000" placeholder="메시지를 입력하세요"></textarea><button class="btn pri" id="c-send">보내기</button></form></div>`;
+  $("#s-back").onclick = back;
+  $("#c-form").onsubmit = async e => {
+    e.preventDefault(); const text = $("#c-text").value.trim(); if (!text) return; $("#c-send").disabled = true;
+    try { const b = FS.writeBatch(db); const [a1, a2] = [me(), other].sort();
+      b.set(FS.doc(col("chats", id, "messages")), { from: me(), text, createdAt: FS.serverTimestamp() });
+      b.set(ref("chats", id), { members: [a1, a2], lastText: text.slice(0, 200), lastAt: FS.serverTimestamp(), lastFrom: me(), reads: { [me()]: FS.serverTimestamp() } }, { merge: true });
+      await b.commit(); $("#c-text").value = "";
+    } catch (e) { toast("보내지 못했어요: " + errText(e)); }
+    const sb = $("#c-send"); if (sb) sb.disabled = false;
+  };
+  $("#c-text").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#c-form").requestSubmit(); } };
+  if (S.chats.some(c => c.id === id)) attachMessages();
+}
+function attachMessages() {
+  if (!chatView || chatUn) return; const { id } = chatView;
+  chatUn = FS.onSnapshot(FS.query(col("chats", id, "messages"), FS.orderBy("createdAt", "desc"), FS.limit(100)), snap => {
+    const el = $("#msgs"); if (!el || !chatView) return; const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+    el.innerHTML = rows.map(m => `<div class="bub ${m.from === me() ? "me" : "them"}">${esc(m.text).replace(/\n/g, "<br>")}<span>${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) : ""}</span></div>`).join("") || `<div class="hint">첫 쪽지를 보내 보세요.</div>`;
+    el.scrollTop = el.scrollHeight; sheet.scrollTop = sheet.scrollHeight; markChatRead();
+  }, e => { const el = $("#msgs"); if (el) el.innerHTML = `<div class="err">불러오지 못했어요: ${errText(e)}</div>`; });
+}
+
+/* ───────────── 알림 ───────────── */
 function unreadN() { return S.notifs.filter(n => !n.read).length; }
 function renderBadge() {
   const p = pendingList().length, u = unreadN(), n = p + u;
+  const dn = S.chats.filter(chatUnread).length; $("#dmN").textContent = dn ? String(dn) : ""; $("#dm").classList.toggle("has", !!dn);
   $("#bell").classList.remove("hide"); $("#bellN").textContent = n ? String(n) : ""; $("#bell").classList.toggle("has", !!n); $("#meDot").classList.toggle("hide", !p);
 }
 const NOTE_TXT = { like: "님이 내 글에 좋아요를 눌렀어요", comment: "님이 내 글에 댓글을 남겼어요", mention: "님이 글의 메모에서 나를 언급했어요" };
@@ -370,9 +428,9 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-pf]"
 
 /* ───────────── 시트(화면 위에 쌓이는 화면) ───────────── */
 function openSheet() { sheet.classList.add("open"); document.body.style.overflow = "hidden"; }
-function closeSheet() { sheet.classList.remove("open"); document.body.style.overflow = ""; stack = []; F = null; D = null; }
-function nav(fn, meta = {}) { stack.push({ fn, ...meta }); fn(); openSheet(); sheet.scrollTop = 0; }
-function back() { stack.pop(); if (!stack.length) { closeSheet(); if (S.tab === "feed") renderFeed(); return; } stack[stack.length - 1].fn(); }
+function closeSheet() { stopChat(); sheet.classList.remove("open"); document.body.style.overflow = ""; stack = []; F = null; D = null; }
+function nav(fn, meta = {}) { stopChat(); stack.push({ fn, ...meta }); fn(); openSheet(); sheet.scrollTop = 0; }
+function back() { stopChat(); stack.pop(); if (!stack.length) { closeSheet(); if (S.tab === "feed") renderFeed(); return; } stack[stack.length - 1].fn(); }
 const bar = (title, right = "") => `<div class="sbar"><button class="btn ghost" id="s-back">‹ 닫기</button><h2>${title}</h2>${right || "<span></span>"}</div>`;
 
 /* ───────────── 상세 ───────────── */
@@ -535,8 +593,8 @@ async function renderProfile(uid) {
   sheet.innerHTML = `${bar("프로필")}<div class="sbody"><div class="profile">${avatar(uid, "lg")}<h3>${esc(p.displayName)}</h3><div class="dim">@${esc(p.handle)}</div>
     ${p.bio ? `<p style="margin:8px 0 0">${esc(p.bio)}</p>` : ""}
     <div class="pcount"><div><b id="pc-posts">–</b>글</div><div><b id="pc-fr">–</b>팔로워</div><div><b id="pc-fg">–</b>팔로잉</div></div>
-    ${uid === me() ? "" : followBtn(uid)}</div><div class="sec">공유한 기록</div><div id="pp"><div class="hint">불러오는 중…</div></div></div>`;
-  $("#s-back").onclick = back; bindFollow();
+    ${uid === me() ? "" : `<div class="row" style="justify-content:center;gap:8px">${followBtn(uid)}<button class="btn" id="p-dm">✉️ 쪽지</button></div>`}</div><div class="sec">공유한 기록</div><div id="pp"><div class="hint">불러오는 중…</div></div></div>`;
+  $("#s-back").onclick = back; bindFollow(); if ($("#p-dm")) $("#p-dm").onclick = () => nav(() => renderChat(uid));
   try {
     const [ps, fr, fg] = await Promise.all([
       FS.getDocs(FS.query(col("posts"), FS.where("ownerUid", "==", uid), FS.orderBy("when", "desc"), FS.limit(50))),

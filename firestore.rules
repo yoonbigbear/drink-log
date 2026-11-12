@@ -192,6 +192,35 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.toUid == request.auth.uid;
     }
 
+    // ───────── 쪽지(DM) ─────────
+    match /chats/{chatId} {
+      allow read: if isActive() && request.auth.uid in resource.data.members;
+      allow create: if isActive()
+        && request.resource.data.keys().hasOnly(['members', 'lastText', 'lastAt', 'lastFrom', 'reads'])
+        && request.resource.data.members.size() == 2
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.members[0] < request.resource.data.members[1]
+        && chatId == request.resource.data.members[0] + '_' + request.resource.data.members[1]
+        && request.resource.data.lastFrom == request.auth.uid
+        && memberDoc(request.resource.data.members[0] == request.auth.uid
+             ? request.resource.data.members[1] : request.resource.data.members[0]).data.status == 'active';
+      allow update: if isActive() && request.auth.uid in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastText', 'lastAt', 'lastFrom', 'reads']);
+
+      match /messages/{mid} {
+        allow read: if isActive() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        allow create: if isActive()
+          && request.auth.uid in getAfter(/databases/$(database)/documents/chats/$(chatId)).data.members
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 1000;
+        allow delete: if signedIn() && resource.data.from == request.auth.uid;
+      }
+    }
+
     // ───────── 飲みログ: 팔로우 ─────────
     match /follows/{id} {
       allow read: if isActive();
