@@ -1,7 +1,7 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122124";
-import { qrCanvas } from "./qr.js?v=11122124";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122124";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122127";
+import { qrCanvas } from "./qr.js?v=11122127";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122127";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -12,7 +12,7 @@ const icon = it => (CAT[it.category] || CAT["기타"]).icon;
 const me = () => S.user.uid;
 
 const S = { user: null, member: null, started: false, tab: "feed",
-  mine: [], following: new Set(), invitees: [], feed: [], feedState: "idle", reco: false, q: "", cat: "" };
+  mine: [], following: new Set(), invitees: [], feed: [], notifs: [], notifReady: false, feedState: "idle", reco: false, q: "", cat: "" };
 const people = new Map();           // uid -> member 문서 (없으면 null)
 let stopFns = [], F = null, D = null, stack = [];
 const sheet = $("#sheet");
@@ -181,10 +181,11 @@ function startApp() {
     S.invitees = snap.docs.map(d => ({ uid: d.id, ...d.data() })); S.invitees.forEach(p => people.set(p.uid, p));
     renderBadge(); renderMe();
   }, e => setStatus(errText(e))));
+  un.push(startNotifs(uid));
   stopFns = un; setTab(S.tab);
 }
 function stopApp() {
-  stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.feedState = "idle";
+  stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.notifs = []; S.notifReady = false; S.feedState = "idle";
   stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; S.follow = false;
 }
 
@@ -198,10 +199,44 @@ function setTab(t) {
 }
 document.querySelectorAll("nav .tab").forEach(b => b.onclick = () => setTab(b.dataset.v));
 $("#fab").onclick = () => openForm(null);
-$("#bell").onclick = () => setTab("me");
+$("#bell").onclick = () => nav(renderNotifs, { notif: true });
 function pendingList() { return S.invitees.filter(i => i.status === "pending"); }
+function unreadN() { return S.notifs.filter(n => !n.read).length; }
 function renderBadge() {
-  const n = pendingList().length; $("#bell").classList.toggle("hide", !n); $("#bellN").textContent = n ? n + "건 승인 대기" : ""; $("#meDot").classList.toggle("hide", !n);
+  const p = pendingList().length, u = unreadN(), n = p + u;
+  $("#bell").classList.remove("hide"); $("#bellN").textContent = n ? String(n) : ""; $("#bell").classList.toggle("has", !!n); $("#meDot").classList.toggle("hide", !p);
+}
+const NOTE_TXT = { like: "님이 내 글에 좋아요를 눌렀어요", comment: "님이 내 글에 댓글을 남겼어요" };
+function startNotifs(uid) {
+  return FS.onSnapshot(FS.query(col("notifications"), FS.where("toUid", "==", uid), FS.limit(50)), async snap => {
+    S.notifs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now()));
+    if (S.notifReady) {
+      const fresh = snap.docChanges().filter(c => c.type === "added" && !c.doc.metadata.hasPendingWrites && !c.doc.data().read);
+      if (fresh.length) { const d = fresh[fresh.length - 1].doc.data(); await loadPeople([d.fromUid]); toast(`🔔 ${pname(d.fromUid)}${NOTE_TXT[d.type] || "님의 알림"}`); }
+    }
+    S.notifReady = true; renderBadge(); if (stack.length && stack[stack.length - 1].notif) stack[stack.length - 1].fn();
+  }, e => setStatus(errText(e)));
+}
+function renderNotifs() {
+  const p = pendingList().length;
+  sheet.innerHTML = `${bar("알림", S.notifs.some(n => !n.read) ? `<button class="btn" id="n-read">모두 읽음</button>` : "")}<div class="sbody">
+    ${p ? `<div class="person inbox" id="n-pend" style="cursor:pointer"><div class="pi"><b>가입 승인 요청 ${p}건</b><span class="dim sm">눌러서 승인하러 가기 →</span></div></div>` : ""}
+    ${S.notifs.length ? S.notifs.map(n => `<div class="person ${n.read ? "" : "unread"}" data-n="${esc(n.id)}" data-post="${esc(n.postId || "")}" style="cursor:pointer">${avatar(n.fromUid)}<div class="pi"><b>${esc(pname(n.fromUid))}</b><span class="dim sm">${esc(NOTE_TXT[n.type] || "님의 알림")}${n.postName ? ` · ${esc(n.postName)}` : ""}</span>${n.text ? `<span class="sm">“${esc(n.text)}”</span>` : ""}</div></div>`).join("")
+      : (p ? "" : `<div class="empty"><div class="big">🔔</div>아직 알림이 없어요.<br>내 글에 좋아요나 댓글이 달리면 여기에 떠요.</div>`)}</div>`;
+  $("#s-back").onclick = back;
+  if ($("#n-read")) $("#n-read").onclick = markAllRead;
+  if ($("#n-pend")) $("#n-pend").onclick = () => { closeSheet(); setTab("me"); };
+  sheet.querySelectorAll("[data-n]").forEach(el => el.onclick = async () => {
+    const n = S.notifs.find(x => x.id === el.dataset.n); if (n && !n.read) FS.updateDoc(ref("notifications", n.id), { read: true }).catch(() => {});
+    try { const ps = await FS.getDoc(ref("posts", el.dataset.post)); if (!ps.exists()) return toast("삭제되었거나 공유가 해제된 글이에요");
+      const it = { id: ps.id, ...ps.data() }; await loadPeople([it.ownerUid]); nav(() => renderDetail(it, "post")); } catch (e) { toast("실패: " + errText(e)); } });
+}
+function markAllRead() {
+  const b = FS.writeBatch(db); S.notifs.filter(n => !n.read).forEach(n => b.update(ref("notifications", n.id), { read: true })); b.commit().catch(e => toast("실패: " + errText(e)));
+}
+function notify(toUid, type, id, extra) {
+  if (!toUid || toUid === me()) return null;
+  return { ref: ref("notifications", id), data: Object.assign({ toUid, fromUid: me(), type, read: false, createdAt: FS.serverTimestamp() }, extra) };
 }
 
 /* ───────────── 피드 ───────────── */
@@ -364,12 +399,12 @@ function renderDetail(it, kind) {
     $("#d-again").onclick = () => openForm(null, { place: it.place, address: it.address, lat: it.lat, lng: it.lng, mapLink: it.mapLink });
     $("#d-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) deleteLog(it); };
   }
-  if (social) initSocial(it.id, owner);
+  if (social) initSocial(it.id, owner, it.name);
 }
 
 /* ───────────── 좋아요 · 댓글 ───────────── */
-async function initSocial(id, ownerUid) {
-  D = { id, ownerUid, liked: false, likeCount: 0, commentCount: 0, comments: [] };
+async function initSocial(id, ownerUid, name) {
+  D = { id, ownerUid, name, liked: false, likeCount: 0, commentCount: 0, comments: [] };
   try {
     const [ps, ls, cs] = await Promise.all([FS.getDoc(ref("posts", id)), FS.getDoc(ref("posts", id, "likes", me())), FS.getDocs(FS.query(col("posts", id, "comments"), FS.orderBy("createdAt", "asc")))]);
     if (D?.id !== id) return;
@@ -387,7 +422,7 @@ function renderSocial() {
     <div class="cinput"><input class="inp" id="s-text" maxlength="500" placeholder="댓글 달기…"><button class="btn pri" id="s-send">등록</button></div>`;
   $("#s-like").onclick = async () => {
     const was = D.liked; const b = FS.writeBatch(db); const lr = ref("posts", D.id, "likes", me()), pr = ref("posts", D.id);
-    if (was) { b.delete(lr); b.update(pr, { likeCount: FS.increment(-1) }); } else { b.set(lr, { createdAt: FS.serverTimestamp() }); b.update(pr, { likeCount: FS.increment(1) }); }
+    if (was) { b.delete(lr); b.update(pr, { likeCount: FS.increment(-1) }); } else { b.set(lr, { createdAt: FS.serverTimestamp() }); b.update(pr, { likeCount: FS.increment(1) }); const nt = notify(D.ownerUid, "like", `like_${D.id}_${me()}`, { postId: D.id, postName: D.name || "" }); if (nt) b.set(nt.ref, nt.data); }
     D.liked = !was; D.likeCount += was ? -1 : 1; syncCounts(); renderSocial();
     try { await b.commit(); } catch (e) { D.liked = was; D.likeCount += was ? 1 : -1; syncCounts(); renderSocial(); toast("실패: " + errText(e)); }
   };
@@ -395,6 +430,7 @@ function renderSocial() {
     const inp = $("#s-text"); const text = inp.value.trim(); if (!text) return; $("#s-send").disabled = true;
     const b = FS.writeBatch(db); const cr = FS.doc(col("posts", D.id, "comments"));
     b.set(cr, { authorUid: me(), text, createdAt: FS.serverTimestamp() }); b.update(ref("posts", D.id), { commentCount: FS.increment(1) });
+    const nt = notify(D.ownerUid, "comment", `c_${cr.id}`, { postId: D.id, postName: D.name || "", text: text.slice(0, 80) }); if (nt) b.set(nt.ref, nt.data);
     try { await b.commit(); D.comments.push({ id: cr.id, authorUid: me(), text, createdAt: null }); D.commentCount++; people.set(me(), S.member); syncCounts(); renderSocial(); }
     catch (e) { toast("실패: " + errText(e)); $("#s-send").disabled = false; }
   };
