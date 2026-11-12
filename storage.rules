@@ -1,0 +1,16 @@
+rules_version = '2';
+// Firebase 콘솔 → Storage → 규칙에 붙여 넣는다.
+// 사진 경로: photos/{올린 사람 uid}/{기록 id}/{사진 id}.jpg (+ _t.jpg 썸네일)
+// 읽기: 로그인한 사람 (경로가 추측 불가능한 랜덤 id 라서, 공유하지 않은 기록의 사진 주소는 본인만 알 수 있다)
+// 쓰기: 본인 폴더에만, 3 MB 이하 이미지만
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /photos/{uid}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

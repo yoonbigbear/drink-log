@@ -1,19 +1,43 @@
 # 술로그
 
-마신 술(위스키, 와인, 사케, 막걸리, 전통주, 바이주, 꼬냑 등)을 사진·장소(지도)·향·경험·가격·시간과 함께 기록하는 모바일 웹앱.
+마신 술(위스키, 와인, 사케, 막걸리, 전통주, 바이주, 꼬냑 등)을 사진·장소(지도)·향·경험·가격·시간과 함께 기록하고,
+승인된 멤버끼리 피드·팔로우·좋아요·댓글·술 추천을 나누는 **초대제** 모바일 웹앱.
 
 - 호스팅: GitHub Pages (`main` 브랜치, 루트)
-- 로그인/DB: Firebase Auth(구글) + Firestore — flashcard 와 같은 프로젝트(`flashcard-1476f`)
+- 로그인/DB/사진: Firebase Auth(구글) + Firestore + Cloud Storage — flashcard 와 같은 프로젝트(`flashcard-1476f`)
 - 지도: Leaflet + OpenStreetMap/CARTO 타일, 주소 검색은 Nominatim
 
+## 가입 방식 (승인제)
+1. 구글 로그인 후 아이디·닉네임을 정하고, **추천인 아이디를 검색**해 선택한 뒤 가입을 신청한다. (상태: 승인 대기)
+2. 추천인이 앱의 **[나] 탭**에서 요청을 **승인/거절**한다. 승인되면 신청자 화면이 자동으로 앱으로 바뀐다.
+3. 첫 멤버는 `firebase-config.js` 의 `OWNER_UID` 계정(관리자)이다. 추천인 없이 바로 시작할 수 있다.
+   → **가장 먼저 관리자 계정으로 한 번 로그인해서 시작**해야 다른 사람이 가입 신청을 할 수 있다.
+
+## 처음 설정 (한 번만)
+1. **Firebase 요금제**: 콘솔 → 사용량 및 결제 → **Blaze(종량제)** 로 업그레이드하고 **예산 알림**(예: 월 1천 원)을 건다.
+   무료 사용량은 그대로 포함되고, 그걸 넘는 만큼만 청구된다.
+2. **Firestore 규칙**: 콘솔 → Firestore → 규칙에 `firestore.rules` 내용을 통째로 붙여 넣고 게시. (flashcard 규칙도 들어 있다)
+3. **Storage 시작**: 콘솔 → Storage → 시작하기(위치는 서울 `asia-northeast3` 권장) → 규칙에 `storage.rules` 내용을 붙여 넣고 게시.
+4. **색인**: 콘솔 → Firestore → 색인 → 복합 색인 추가 — 컬렉션 `posts`, 필드 `ownerUid`(오름차순) + `when`(내림차순).
+   (건너뛰어도 된다. 피드를 처음 열 때 앱 위쪽에 **색인 만들기 링크**가 뜨니 눌러서 만들어도 된다. 만드는 데 몇 분 걸린다.)
+5. **로그인 도메인**: 콘솔 → Authentication → 설정 → 승인된 도메인에 `yoonbigbear.github.io` 가 있어야 한다. (flashcard 가 이미 쓰고 있다)
+6. GitHub 저장소 Settings → Pages → Source: `main` / `/ (root)`.
+
 ## 데이터
-- `drinks/{OWNER_UID}/logs/{id}` 기록 한 건 (사진 썸네일 포함)
-- `drinks/{OWNER_UID}/photos/{id}` 원본 사진 (JPEG data URL, 1 MiB 이하로 줄여 저장)
+| 경로 | 내용 | 누가 |
+|---|---|---|
+| `members/{uid}` | 회원 (status: pending / active / rejected) | 승인은 추천인만 |
+| `handles/{아이디}` | 아이디 → uid (중복 방지·추천인 검색) | 목록 조회 불가 |
+| `private/{uid}/logs/{id}` | 내 기록 원본 (가격·좌표 포함) | 본인만 |
+| `posts/{id}` | 멤버에게 공유한 기록 (공유하기로 고른 항목만 복사) | 승인된 멤버 읽기, 작성자 쓰기 |
+| `posts/{id}/comments`, `posts/{id}/likes` | 댓글, 좋아요 | 승인된 멤버 |
+| `follows/{나}_{상대}` | 팔로우 | 본인 |
+| Storage `photos/{uid}/{기록id}/…` | 원본 + 썸네일 사진 | 본인 쓰기 |
 
-누구나 읽을 수 있고, 쓰기는 `firebase-config.js` 의 `OWNER_UID` 계정만 가능하다.
-
-## 처음 설정
-1. Firebase 콘솔 → Firestore → 규칙에 `firestore.rules` 내용을 통째로 붙여 넣고 게시 (flashcard 규칙도 들어 있음).
-2. 저장소 Settings → Pages → Source: `main` / `/ (root)`.
+## 알아둘 점
+- 공유한 글에서 **가격 / 메모 / 장소(숨김·이름만·주소와 좌표까지)** 를 기록마다 고를 수 있다. 기본은 가격 숨김, 장소 이름만.
+- 비공개(나만 보기) 기록의 사진 주소는 본인만 알지만, Storage 규칙은 "로그인한 사람은 읽기 가능"이다. 주소가 추측 불가능한 랜덤 값이라서 쓰는 방식이다.
+- 알림(푸시)은 없다. 가입 요청은 추천인이 앱을 열어야 [나] 탭과 상단 🔔 에 보인다.
+- 멤버 차단/삭제는 Firebase 콘솔에서 `members/{uid}` 의 `status` 를 `rejected` 로 바꾸면 된다.
 
 주종을 추가하거나 추천 향 태그를 바꾸려면 `categories.js` 만 고치면 된다.

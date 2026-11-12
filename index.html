@@ -16,37 +16,57 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <div class="top">
-      <h1>술로그<small>마신 술 기록</small></h1>
-      <button id="account" class="btn small">로그인</button>
-    </div>
-    <div class="stats">
-      <div class="stat"><b id="s-total">–</b><span>기록</span></div>
-      <div class="stat"><b id="s-places">–</b><span>다녀온 곳</span></div>
-      <div class="stat"><b id="s-month">–</b><span>이번 달 지출</span></div>
-    </div>
-  </header>
-  <div id="status"></div>
+  <!-- 로그인·가입·승인 대기 화면 -->
+  <div id="gate" class="gate"><div class="gbox"><div class="glogo">🥃</div><p class="gsub">불러오는 중…</p></div></div>
 
-  <main id="v-list">
-    <div class="search">
-      <input id="q" type="search" placeholder="이름, 생산자, 장소, 향 검색" autocomplete="off">
-      <button id="qclear" class="hide" aria-label="지우기">✕</button>
-    </div>
-    <div class="chips scroll" id="catfilter"></div>
-    <div id="list"></div>
-  </main>
-  <main id="v-places" class="hide">
-    <div id="map" class="bigmap"></div>
-    <div id="places"></div>
-  </main>
+  <div id="app" class="hide">
+    <header>
+      <div class="top">
+        <h1>술로그</h1>
+        <button id="bell" class="btn small hide">🔔 <span id="bellN"></span></button>
+      </div>
+    </header>
+    <div id="status"></div>
 
-  <nav><div class="in">
-    <button class="tab on" data-v="list"><span class="ic">🍶</span>기록</button>
-    <button class="fab hide" id="fab" aria-label="새 기록">+</button>
-    <button class="tab" data-v="places"><span class="ic">📍</span>장소</button>
-  </div></nav>
+    <main id="v-feed">
+      <div class="chips scroll" id="feedbar">
+        <button class="chip on" data-f="all">전체</button>
+        <button class="chip" data-f="reco">👍 추천만</button>
+        <button class="chip" id="findpeople">🔎 사람 찾기</button>
+        <button class="chip" id="refresh">↻ 새로고침</button>
+      </div>
+      <div id="feedlist"></div>
+    </main>
+
+    <main id="v-mine" class="hide">
+      <div class="stats">
+        <div class="stat"><b id="s-total">–</b><span>기록</span></div>
+        <div class="stat"><b id="s-places">–</b><span>다녀온 곳</span></div>
+        <div class="stat"><b id="s-month">–</b><span>이번 달 지출</span></div>
+      </div>
+      <div class="search">
+        <input id="q" type="search" placeholder="이름, 생산자, 장소, 향 검색" autocomplete="off">
+        <button id="qclear" class="hide" aria-label="지우기">✕</button>
+      </div>
+      <div class="chips scroll" id="catfilter"></div>
+      <div id="list"></div>
+    </main>
+
+    <main id="v-places" class="hide">
+      <div id="map" class="bigmap"></div>
+      <div id="places"></div>
+    </main>
+
+    <main id="v-me" class="hide"><div id="me"></div></main>
+
+    <nav><div class="in">
+      <button class="tab on" data-v="feed"><span class="ic">🏠</span>피드</button>
+      <button class="tab" data-v="mine"><span class="ic">🥃</span>기록</button>
+      <button class="fab" id="fab" aria-label="새 기록">+</button>
+      <button class="tab" data-v="places"><span class="ic">📍</span>장소</button>
+      <button class="tab" data-v="me"><span class="ic">👤</span>나<i id="meDot" class="dotbadge hide"></i></button>
+    </div></nav>
+  </div>
 
   <section class="sheet" id="sheet"></section>
 
