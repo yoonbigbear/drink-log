@@ -1,6 +1,6 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, ST, auth, db, storage, OWNER } from "./fb.js";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, makeMap, dot, loadImg, toBlob, readExif } from "./util.js";
+import { A, FS, auth, db, OWNER } from "./fb.js";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, makeMap, dot, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -23,6 +23,7 @@ function errText(e) {
   const c = e && e.code || "";
   if (c === "permission-denied") return "권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요.";
   if (c === "failed-precondition") { const m = (e.message || "").match(/https:\/\/console\.firebase\.google\.com[^\s]*/); return m ? `색인이 필요해요. <a href="${esc(m[0])}" target="_blank" rel="noopener">여기를 눌러 만들고</a> 몇 분 뒤 새로고침하세요.` : "색인이 필요해요. README의 색인 설정을 확인해 주세요."; }
+  if (c === "resource-exhausted") return "오늘 무료 사용량을 모두 썼어요. 내일 다시 시도해 주세요.";
   if (c === "unavailable") return "서버에 연결할 수 없어요.";
   return (c || e.message || "오류");
 }
@@ -216,11 +217,11 @@ async function loadFeed() {
   if (S.tab === "feed") renderFeed();
 }
 function postCard(p) {
-  const ph = (p.photos || [])[0]; const c = CAT[p.category] || CAT["기타"];
+  const c = CAT[p.category] || CAT["기타"];
   return `<article class="post" data-id="${esc(p.id)}">
     <div class="phead">${avatar(p.ownerUid)}<div style="min-width:0"><b>${esc(pname(p.ownerUid))}</b> <span class="dim sm">@${esc(phandle(p.ownerUid))}</span>
       <div class="dim sm">${esc(ago(p.when))}${p.place ? " · 📍 " + esc(p.place) : ""}</div></div></div>
-    ${ph ? `<img class="pimg" src="${esc(ph.turl || ph.url)}" loading="lazy" alt="">` : ""}
+    ${p.thumb ? `<img class="pimg" src="${esc(p.thumb)}" alt="">` : ""}
     <div class="pbody"><div class="cname" style="white-space:normal">${c.icon} ${esc(p.name)}${p.recommend ? '<span class="reco">👍 추천</span>' : ""}</div>
       <div class="cmeta" style="white-space:normal">${esc([p.subtype || p.category, p.producer, p.aging].filter(Boolean).join(" · "))}</div>
       ${p.recoLine ? `<div style="margin-top:4px;font-size:14px">“${esc(p.recoLine)}”</div>` : ""}
@@ -261,9 +262,8 @@ function renderMine() {
   if (!all.length) L_.innerHTML = `<div class="empty"><div class="big">🍶</div>아직 기록이 없어요.<br>아래 <b>+</b> 버튼으로 첫 잔을 남겨 보세요.</div>`;
   else if (!items.length) L_.innerHTML = `<div class="empty">조건에 맞는 기록이 없어요.</div>`;
   else L_.innerHTML = items.map(i => {
-    const ph = (i.photos || [])[0];
     return `<button class="card" data-id="${esc(i.id)}">
-      <div class="thumb">${ph ? `<img src="${esc(ph.turl || ph.url)}" alt="" loading="lazy">` : icon(i)}</div>
+      <div class="thumb">${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : icon(i)}</div>
       <div class="cbody">
         <div class="cname">${esc(i.name)}${i.shared ? '<span class="badge">공유 중</span>' : ""}</div>
         <div class="cmeta">${icon(i)} ${esc([i.subtype || i.category, i.producer, i.aging].filter(Boolean).join(" · "))}</div>
@@ -329,7 +329,7 @@ function renderDetail(it, kind) {
   sheet.innerHTML = `${bar("", isMine ? `<button class="btn" id="d-edit">수정</button>` : "")}
   <div class="sbody">
     ${kind === "post" ? `<div class="phead" style="padding:0 0 12px">${avatar(owner)}<div class="pi" data-prof="${esc(owner)}" style="flex:1;min-width:0;cursor:pointer"><b>${esc(pname(owner))}</b><div class="dim sm">@${esc(phandle(owner))} · ${esc(ago(it.when))}</div></div>${isMine ? "" : followBtn(owner)}</div>` : ""}
-    ${ph.length ? `<div class="gallery">${ph.map(p => `<img src="${esc(p.url)}" alt="">`).join("")}</div>` : ""}
+    ${ph.length ? `<div class="gallery">${ph.map((p, i) => `<img data-pid="${esc(p.id)}" src="${i === 0 ? esc(it.thumb || "") : ""}" alt="">`).join("")}</div>` : ""}
     <h3 class="dname">${esc(it.name)}${it.recommend ? '<span class="reco">👍 추천</span>' : ""}${kind === "mine" && it.shared ? '<span class="badge">공유 중</span>' : ""}</h3>
     <div class="dsub">${c.icon} ${esc([it.category, it.subtype].filter(Boolean).join(" · "))}</div>
     <div class="dsub">${esc([it.producer, it.origin, it.aging, it.abv ? it.abv + "%" : ""].filter(Boolean).join(" · "))}</div>
@@ -348,6 +348,7 @@ function renderDetail(it, kind) {
     ${kind === "mine" ? `<div class="actions"><button class="btn" id="d-again">여기서 한 잔 더</button><button class="btn danger" id="d-del">삭제</button></div>` : ""}
   </div>`;
   $("#s-back").onclick = back;
+  sheet.querySelectorAll(".gallery img[data-pid]").forEach(async img => { try { const d = await fullPhoto(img.dataset.pid); if (d && img.isConnected) img.src = d; } catch (e) {} });
   if (it.lat != null) setTimeout(() => { const el = $("#d-map"); if (!el) return; const m = makeMap(el, { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
     m.setView([it.lat, it.lng], 16); dot([it.lat, it.lng]).addTo(m); }, 280);
   const prof = sheet.querySelector("[data-prof]"); if (prof) prof.onclick = () => nav(() => renderProfile(owner));
@@ -500,7 +501,7 @@ function renderEditProfile() {
 function openForm(it, pre) {
   const d = Object.assign({}, pre || {}, it || {}); const o = d.shareOpts || {};
   F = { id: it?.id || null, createdAt: it?.createdAt || null, wasShared: !!it?.shared,
-    photos: (it?.photos || []).map(p => ({ ...p })), removed: [], tags: new Set(it?.tags || []), rating: it?.rating || 0,
+    photos: (it?.photos || []).map(p => ({ ...p })), removed: [], origFirstId: it?.photos?.[0]?.id || null, origThumb: it?.thumb || "", tags: new Set(it?.tags || []), rating: it?.rating || 0,
     whenTouched: !!it, cat: d.category || S.mine[0]?.category || "위스키", pickMap: null, pickMarker: null,
     share: !!it?.shared, sPrice: o.price ?? false, sPlace: o.place || "name", sNote: o.note ?? true, reco: !!d.recommend };
   const coordStr = d.lat != null ? `${d.lat}, ${d.lng}` : ""; const recent = placeIndex().slice(0, 10);
@@ -554,6 +555,7 @@ function openForm(it, pre) {
     ${it ? `<button type="button" class="btn danger" id="f-del" style="width:100%;padding:11px">이 기록 삭제</button>` : ""}
   </form>`;
   applyCat(); renderPhotos(); renderRate(); updateCoordMsg(); sheet.scrollTop = 0;
+  F.photos.forEach(async (p, i) => { if (p.preview) return; if (i === 0 && it?.thumb) p.preview = it.thumb; else { try { p.preview = await thumbFromData(await fullPhoto(p.id)); } catch (e) {} } if (F) renderPhotos(); });
   $("#f-cancel").onclick = cancelForm; $("#f-save").onclick = save; $("#form").onsubmit = e => { e.preventDefault(); save(); };
   $("#f-when").oninput = () => { F.whenTouched = true; }; $("#f-coord").oninput = () => { updateCoordMsg(); syncPickMarker(); };
   $("#f-cats").onclick = e => { const b = e.target.closest("[data-k]"); if (!b) return; F.cat = b.dataset.k; document.querySelectorAll("#f-cats .chip").forEach(x => x.classList.toggle("on", x === b)); applyCat(); };
@@ -600,13 +602,17 @@ function updateCoordMsg() {
   else m.innerHTML = `<div class="err">좌표 형식을 읽지 못했어요. 예: 37.5665, 126.9780</div>`;
 }
 
-/* ── 사진 ── */
-const photoSrc = p => p.preview || p.turl || p.url || "";
+/* ── 사진 (Firestore photos/{id} 에 data URL 로 저장: 무료 요금제에서는 Storage 를 쓸 수 없다) ── */
+const fullCache = new Map();
+async function fullPhoto(id) {
+  if (fullCache.has(id)) return fullCache.get(id);
+  const s = await FS.getDoc(ref("photos", id)); const d = s.exists() ? s.data().data : null; if (d) fullCache.set(id, d); return d;
+}
 function renderPhotos() {
   const el = $("#photos"); if (!el) return;
-  el.innerHTML = F.photos.map((p, i) => `<div class="ph"><img src="${esc(photoSrc(p))}" alt="">${p.busy ? '<div class="up">처리 중…</div>' : ""}<button type="button" class="x" data-i="${i}">✕</button></div>`).join("")
+  el.innerHTML = F.photos.map((p, i) => `<div class="ph"><img src="${esc(p.preview || "")}" alt="">${p.busy ? '<div class="up">처리 중…</div>' : ""}<button type="button" class="x" data-i="${i}">✕</button></div>`).join("")
     + (F.photos.length < 6 ? `<div class="addph" id="addph"><span class="ic">📷</span>사진 추가</div>` : "");
-  el.querySelectorAll(".x").forEach(b => b.onclick = () => { const p = F.photos[+b.dataset.i]; if (p.busy) return; F.photos.splice(+b.dataset.i, 1); if (p.url) F.removed.push(p); renderPhotos(); });
+  el.querySelectorAll(".x").forEach(b => b.onclick = () => { const p = F.photos[+b.dataset.i]; if (p.busy) return; F.photos.splice(+b.dataset.i, 1); if (!p.data) F.removed.push(p); renderPhotos(); });
   const a = $("#addph"); if (a) a.onclick = () => $("#file").click();
 }
 $("#file").onchange = async e => { const files = [...e.target.files]; e.target.value = ""; for (const f of files) { if (!F || F.photos.length >= 6) break; await addPhoto(f); } };
@@ -615,18 +621,9 @@ async function addPhoto(f) {
   try { const ex = readExif(await f.arrayBuffer());
     if (ex) { if (ex.lat != null && !$("#f-coord").value.trim()) { setCoord(ex.lat, ex.lng); toast("사진에서 위치를 찾았어요"); } if (ex.date && !F.whenTouched) { $("#f-when").value = ex.date; F.whenTouched = true; } } } catch (e) {}
   const p = { id: rid(), busy: true }; F.photos.push(p); renderPhotos();
-  try { const img = await loadImg(f); p.blob = await toBlob(img, 1600, 0.85); p.tblob = await toBlob(img, 480, 0.75); p.preview = URL.createObjectURL(p.tblob); p.busy = false; }
+  try { const img = await loadImg(f); p.data = toDataUrl(img, ...FULL); p.thumb = toDataUrl(img, ...THUMB); p.preview = p.thumb; p.busy = false; }
   catch (e) { const i = myF.photos.indexOf(p); if (i >= 0) myF.photos.splice(i, 1); toast("이 사진은 열 수 없어요"); }
   if (F === myF) renderPhotos();
-}
-const photoPath = (logId, pid) => `photos/${me()}/${logId}/${pid}`;
-async function uploadPhoto(logId, p) {
-  const base = photoPath(logId, p.id); const r1 = ST.ref(storage, base + ".jpg"), r2 = ST.ref(storage, base + "_t.jpg");
-  await Promise.all([ST.uploadBytes(r1, p.blob, { contentType: "image/jpeg" }), ST.uploadBytes(r2, p.tblob, { contentType: "image/jpeg" })]);
-  [p.url, p.turl] = await Promise.all([ST.getDownloadURL(r1), ST.getDownloadURL(r2)]); p.blob = p.tblob = null;
-}
-function dropPhotoFiles(logId, photos) {
-  photos.forEach(p => { const base = photoPath(logId, p.id); [".jpg", "_t.jpg"].forEach(s => ST.deleteObject(ST.ref(storage, base + s)).catch(() => {})); });
 }
 
 /* ── 저장 · 삭제 ── */
@@ -637,7 +634,7 @@ function projection(l, uid) {
   const o = l.shareOpts, del = FS.deleteField();
   const p = { ownerUid: uid, category: l.category, name: l.name, subtype: l.subtype, producer: l.producer, origin: l.origin, aging: l.aging, abv: l.abv, detail: l.detail,
     when: l.when, tags: l.tags, nose: l.nose, palate: l.palate, finish: l.finish, rating: l.rating, recommend: l.recommend, recoLine: l.recoLine,
-    photos: l.photos, createdAt: l.createdAt, updatedAt: l.updatedAt,
+    photos: l.photos, thumb: l.thumb || "", createdAt: l.createdAt, updatedAt: l.updatedAt,
     note: o.note ? l.note : "",
     price: o.price && l.price != null ? l.price : del, priceUnit: o.price && l.price != null ? l.priceUnit : del,
     place: o.place !== "none" && l.place ? l.place : del,
@@ -653,27 +650,37 @@ async function save() {
   const cs = v("#f-coord"); const c = parseCoord(cs); const uid = me();
   const id = F.id || FS.doc(col("private", uid, "logs")).id; const btn = $("#f-save"); btn.disabled = true; btn.textContent = "저장 중…";
   try {
-    for (const p of F.photos) if (p.blob) await uploadPhoto(id, p);
-    const photos = F.photos.map(p => ({ id: p.id, url: p.url, turl: p.turl }));
+    const photos = F.photos.map(p => ({ id: p.id }));
+    // 목록·피드용 썸네일은 첫 번째 사진 것만 문서에 담는다
+    let thumb = ""; const first = F.photos[0];
+    if (first) {
+      if (first.thumb) thumb = first.thumb;
+      else if (first.id === F.origFirstId) thumb = F.origThumb;
+      else { const d = await fullPhoto(first.id); thumb = d ? await thumbFromData(d) : ""; }
+    }
     const log = { category: F.cat, name, subtype: v("#f-subtype"), producer: v("#f-producer"), origin: v("#f-origin"), aging: v("#f-aging"), abv: num(v("#f-abv")), detail: v("#f-detail"),
       place: v("#f-place"), address: v("#f-address"), lat: c ? c.lat : null, lng: c ? c.lng : null, mapLink: /^https?:\/\//i.test(cs) ? cs : "",
       when: v("#f-when") || nowLocal(), price: num(v("#f-price")), priceUnit: v("#f-unit"), tags: [...F.tags], nose: v("#f-nose"), palate: v("#f-palate"), finish: v("#f-finish"), note: v("#f-note"),
-      rating: F.rating || 0, photos, recommend: !!$("#f-reco").checked, recoLine: v("#f-recoline"),
+      rating: F.rating || 0, photos, thumb, recommend: !!$("#f-reco").checked, recoLine: v("#f-recoline"),
       shared: F.share, shareOpts: { price: $("#f-sprice").checked, place: $("#f-splace").value, note: $("#f-snote").checked },
       createdAt: F.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (F.wasShared && !F.share) await cleanupSubs(id);
     const b = FS.writeBatch(db); b.set(ref("private", uid, "logs", id), log);
+    for (const p of F.photos) {   // 사진 본문은 따로 저장하고, 공유 여부를 따라간다
+      if (p.data) { b.set(ref("photos", p.id), { ownerUid: uid, logId: id, shared: F.share, data: p.data, createdAt: FS.serverTimestamp() }); fullCache.set(p.id, p.data); }
+      else if (F.share !== F.wasShared) b.update(ref("photos", p.id), { shared: F.share });
+    }
+    F.removed.forEach(p => b.delete(ref("photos", p.id)));
     if (F.share) { const post = projection(log, uid); if (!F.wasShared) { post.likeCount = 0; post.commentCount = 0; } b.set(ref("posts", id), post, { merge: true }); }
     else if (F.wasShared) b.delete(ref("posts", id));
     await b.commit();
-    dropPhotoFiles(id, F.removed);
     const wasNew = !F.id, shared = F.share; F = null;
     if (wasNew) closeSheet(); else back();
     toast(shared ? "저장하고 멤버에게 공유했어요 🥂" : "저장했어요 🥃");
     if (shared) loadFeed();
   } catch (e) {
     btn.disabled = false; btn.textContent = "저장";
-    toast(/storage/.test(e.code || "") ? "사진 업로드 실패 — Storage가 켜져 있는지 확인해 주세요" : "저장 실패: " + errText(e));
+    toast("저장 실패: " + errText(e));
   }
 }
 async function cleanupSubs(id) {
@@ -685,7 +692,7 @@ async function cleanupSubs(id) {
 async function deleteLog(it) {
   try {
     if (it.shared) await cleanupSubs(it.id);
-    const b = FS.writeBatch(db); b.delete(ref("private", me(), "logs", it.id)); if (it.shared) b.delete(ref("posts", it.id)); await b.commit();
-    dropPhotoFiles(it.id, it.photos || []); closeSheet(); toast("삭제했어요"); if (it.shared) loadFeed();
+    const b = FS.writeBatch(db); b.delete(ref("private", me(), "logs", it.id)); if (it.shared) b.delete(ref("posts", it.id));
+    (it.photos || []).forEach(p => b.delete(ref("photos", p.id))); await b.commit(); closeSheet(); toast("삭제했어요"); if (it.shared) loadFeed();
   } catch (e) { toast("삭제 실패: " + errText(e)); }
 }

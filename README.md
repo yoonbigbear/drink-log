@@ -4,7 +4,7 @@
 승인된 멤버끼리 피드·팔로우·좋아요·댓글·술 추천을 나누는 **초대제** 모바일 웹앱.
 
 - 호스팅: GitHub Pages (`main` 브랜치, 루트)
-- 로그인/DB/사진: Firebase Auth(구글) + Firestore + Cloud Storage — flashcard 와 같은 프로젝트(`flashcard-1476f`)
+- 로그인/DB/사진: Firebase Auth(구글) + Firestore — flashcard 와 같은 프로젝트(`flashcard-1476f`), **무료(Spark) 요금제로 동작** (사진도 Firestore 에 저장)
 - 지도: Leaflet + OpenStreetMap/CARTO 타일, 주소 검색은 Nominatim
 
 ## 가입 방식 (승인제)
@@ -14,14 +14,14 @@
    → **가장 먼저 관리자 계정으로 한 번 로그인해서 시작**해야 다른 사람이 가입 신청을 할 수 있다.
 
 ## 처음 설정 (한 번만)
-1. **Firebase 요금제**: 콘솔 → 사용량 및 결제 → **Blaze(종량제)** 로 업그레이드하고 **예산 알림**(예: 월 1천 원)을 건다.
-   무료 사용량은 그대로 포함되고, 그걸 넘는 만큼만 청구된다.
-2. **Firestore 규칙**: 콘솔 → Firestore → 규칙에 `firestore.rules` 내용을 통째로 붙여 넣고 게시. (flashcard 규칙도 들어 있다)
-3. **Storage 시작**: 콘솔 → Storage → 시작하기(위치는 서울 `asia-northeast3` 권장) → 규칙에 `storage.rules` 내용을 붙여 넣고 게시.
-4. **색인**: 콘솔 → Firestore → 색인 → 복합 색인 추가 — 컬렉션 `posts`, 필드 `ownerUid`(오름차순) + `when`(내림차순).
+1. **Firestore 규칙**: 콘솔 → Firestore → 규칙에 `firestore.rules` 내용을 통째로 붙여 넣고 게시. (flashcard 규칙도 들어 있다)
+2. **색인**: 콘솔 → Firestore → 색인 → 복합 색인 추가 — 컬렉션 `posts`, 필드 `ownerUid`(오름차순) + `when`(내림차순).
    (건너뛰어도 된다. 피드를 처음 열 때 앱 위쪽에 **색인 만들기 링크**가 뜨니 눌러서 만들어도 된다. 만드는 데 몇 분 걸린다.)
-5. **로그인 도메인**: 콘솔 → Authentication → 설정 → 승인된 도메인에 `yoonbigbear.github.io` 가 있어야 한다. (flashcard 가 이미 쓰고 있다)
-6. GitHub 저장소 Settings → Pages → Source: `main` / `/ (root)`.
+3. **로그인 도메인**: 콘솔 → Authentication → 설정 → 승인된 도메인에 `yoonbigbear.github.io` 가 있어야 한다. (flashcard 가 이미 쓰고 있다)
+4. GitHub 저장소 Settings → Pages → Source: `main` / `/ (root)`.
+
+결제 등록은 필요 없다. 무료 한도(저장 1 GiB, 읽기 하루 5만, 쓰기 하루 2만, 전송 월 10 GiB)를 넘으면 요금이 나오는 게 아니라
+그날 요청이 실패하고 다음 날 다시 된다. 사용자가 늘어 사진이 많아지면 Blaze 로 올리고 Storage 로 옮기는 걸 고려한다.
 
 ## 데이터
 | 경로 | 내용 | 누가 |
@@ -32,11 +32,11 @@
 | `posts/{id}` | 멤버에게 공유한 기록 (공유하기로 고른 항목만 복사) | 승인된 멤버 읽기, 작성자 쓰기 |
 | `posts/{id}/comments`, `posts/{id}/likes` | 댓글, 좋아요 | 승인된 멤버 |
 | `follows/{나}_{상대}` | 팔로우 | 본인 |
-| Storage `photos/{uid}/{기록id}/…` | 원본 + 썸네일 사진 | 본인 쓰기 |
+| `photos/{id}` | 사진 본문 (1280px JPEG, 약 150~350 KB). 목록용 썸네일은 기록 문서에 1장만 포함 | 본인 쓰기, 공유한 것만 멤버 읽기 |
 
 ## 알아둘 점
 - 공유한 글에서 **가격 / 메모 / 장소(숨김·이름만·주소와 좌표까지)** 를 기록마다 고를 수 있다. 기본은 가격 숨김, 장소 이름만.
-- 비공개(나만 보기) 기록의 사진 주소는 본인만 알지만, Storage 규칙은 "로그인한 사람은 읽기 가능"이다. 주소가 추측 불가능한 랜덤 값이라서 쓰는 방식이다.
+- 사진은 기록당 최대 6장이다. 나만 보기 기록의 사진은 본인만 읽을 수 있고, 공유하면 멤버가 읽을 수 있다(공유를 끄면 다시 잠긴다).
 - 알림(푸시)은 없다. 가입 요청은 추천인이 앱을 열어야 [나] 탭과 상단 🔔 에 보인다.
 - 멤버 차단/삭제는 Firebase 콘솔에서 `members/{uid}` 의 `status` 를 `rejected` 로 바꾸면 된다.
 

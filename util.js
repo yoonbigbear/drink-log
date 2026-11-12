@@ -53,11 +53,22 @@ export function loadImg(file) {
   return new Promise((res, rej) => { const u = URL.createObjectURL(file); const img = new Image();
     img.onload = () => { URL.revokeObjectURL(u); res(img); }; img.onerror = () => { URL.revokeObjectURL(u); rej(new Error("decode")); }; img.src = u; });
 }
-export function toBlob(img, max, q) {
-  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-  return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("encode")), "image/jpeg", q));
+// 긴 변을 max 로 줄여 JPEG data URL 로. limit(문자 수)을 넘으면 품질·크기를 낮춰 다시 만든다.
+export function toDataUrl(img, max, q, limit) {
+  let size = max, out = "";
+  for (let i = 0; i < 8; i++) {
+    const k = Math.min(1, size / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    out = c.toDataURL("image/jpeg", q);
+    if (out.length <= limit) return out;
+    if (q > 0.5) q -= 0.1; else size = Math.round(size * 0.8);
+  }
+  return out;
+}
+export const THUMB = [320, 0.65, 26000], FULL = [1280, 0.8, 380000];
+export function thumbFromData(dataUrl) {
+  return new Promise(res => { const img = new Image(); img.onload = () => res(toDataUrl(img, ...THUMB)); img.onerror = () => res(""); img.src = dataUrl; });
 }
 
 // EXIF (JPEG) — 촬영 시간·GPS

@@ -6,6 +6,7 @@ rules_version = '2';
 //   members/{uid}              회원. status: pending(승인 대기) | active | rejected
 //   handles/{handle}           아이디 → uid (아이디 중복 방지, 추천인 검색용 · 목록 조회 불가)
 //   private/{uid}/logs/{id}    내 기록 원본 (나만 읽고 씀)
+//   photos/{id}                사진 본문 (JPEG data URL). shared=true 인 것만 멤버가 읽음
 //   posts/{id}                 멤버에게 공유한 기록 (같은 id). 공유할 항목만 복사됨
 //   posts/{id}/comments/{cid}  댓글
 //   posts/{id}/likes/{uid}     좋아요
@@ -111,6 +112,20 @@ service cloud.firestore {
     // ───────── 술로그: 내 기록 (비공개 원본) ─────────
     match /private/{uid}/logs/{id} {
       allow read, write: if isSelf(uid) && isActive();
+    }
+
+    // ───────── 술로그: 사진 (무료 요금제라 Storage 대신 Firestore 에 저장) ─────────
+    match /photos/{id} {
+      allow get: if isActive() && (resource.data.ownerUid == request.auth.uid || resource.data.shared == true);
+      allow create: if isActive()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'logId', 'shared', 'data', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.shared is bool
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000;
+      allow update: if isActive() && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shared']);
+      allow delete: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
     }
 
     // ───────── 술로그: 공유된 게시물 ─────────
