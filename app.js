@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122353";
-import { qrCanvas } from "./qr.js?v=11122353";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122353";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11130056";
+import { qrCanvas } from "./qr.js?v=11130056";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11130056";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -43,15 +43,32 @@ const loginBtn = () => $("#g-login").onclick = async () => {
   try { await A.signInWithPopup(auth, new A.GoogleAuthProvider()); }
   catch (e) { if (!/popup-closed|cancelled/.test(e.code || "")) toast("로그인 실패: " + (e.code || e.message)); }
 };
+const AUTH_ERR = { "auth/invalid-email": "이메일 형식이 올바르지 않아요", "auth/missing-password": "비밀번호를 입력해 주세요", "auth/weak-password": "비밀번호는 6자 이상이어야 해요",
+  "auth/email-already-in-use": "이미 가입된 이메일이에요. 로그인해 보세요", "auth/invalid-credential": "이메일 또는 비밀번호가 맞지 않아요", "auth/wrong-password": "이메일 또는 비밀번호가 맞지 않아요",
+  "auth/user-not-found": "이메일 또는 비밀번호가 맞지 않아요", "auth/too-many-requests": "시도가 너무 많아요. 잠시 후 다시 해 주세요", "auth/operation-not-allowed": "이메일 로그인이 아직 켜져 있지 않아요 (관리자: Firebase 콘솔에서 이메일/비밀번호를 켜 주세요)",
+  "auth/network-request-failed": "네트워크 연결을 확인해 주세요" };
+function emailAuth() {
+  const em = () => $("#e-mail").value.trim(), pw = () => $("#e-pass").value;
+  const run = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); } catch (e) { toast(AUTH_ERR[e.code] || ("실패: " + (e.code || e.message))); } };
+  $("#e-login").onclick = () => run(() => A.signInWithEmailAndPassword(auth, em(), pw()));
+  $("#e-signup").onclick = () => run(() => A.createUserWithEmailAndPassword(auth, em(), pw()));
+  $("#e-reset").onclick = () => { if (!em()) return toast("위에 이메일을 먼저 적어 주세요"); run(() => A.sendPasswordResetEmail(auth, em()), "비밀번호 재설정 메일을 보냈어요. 스팸함도 확인해 보세요"); };
+  [$("#e-mail"), $("#e-pass")].forEach(i => i.onkeydown = e => { if (e.key === "Enter") $("#e-login").click(); });
+}
 const logout = () => A.signOut(auth);
 
 function gateLanding() {
   showGate(`<div class="glogo">🥃</div><h1>飲みログ</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
+    <div class="or">또는 이메일로</div>
+    <input class="inp" id="e-mail" type="email" autocomplete="email" placeholder="이메일">
+    <input class="inp" id="e-pass" type="password" autocomplete="current-password" placeholder="비밀번호 (6자 이상)" style="margin-top:8px">
+    <div class="row" style="margin-top:8px"><button class="btn pri" id="e-login">이메일로 로그인</button><button class="btn" id="e-signup">이메일로 가입</button></div>
+    <button class="linkbtn" id="e-reset" type="button">비밀번호를 잊으셨나요?</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
     <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}`);
-  loginBtn(); bindQr($("#gate"), "qr-gate");
+  loginBtn(); emailAuth(); bindQr($("#gate"), "qr-gate");
 }
 function gateError(e) {
   showGate(`<div class="glogo">⚠️</div><h2 style="text-align:center">연결에 실패했어요</h2><p class="gsub" style="text-align:center">${errText(e)}</p><button class="btn big" id="g-retry">다시 시도</button><button class="btn ghost" id="g-out">로그아웃</button>`);

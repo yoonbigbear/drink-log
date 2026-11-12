@@ -185,3 +185,5 @@ nav .tab{position:relative}
 #bell:not(.has){border-color:var(--line);color:var(--muted)}
 .adm{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:flex;flex-direction:column;gap:3px}
 .mention{color:var(--amber2);text-decoration:none;font-weight:600}.mention.off{color:var(--muted)}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:16px 0 10px}.or:before,.or:after{content:"";flex:1;border-top:1px solid var(--line)}
+.linkbtn{background:none;border:0;color:var(--muted);font-size:12px;text-decoration:underline;margin-top:10px;cursor:pointer}
