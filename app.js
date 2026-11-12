@@ -1,7 +1,7 @@
-// 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122127";
-import { qrCanvas } from "./qr.js?v=11122127";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122127";
+// 노모로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122130";
+import { qrCanvas } from "./qr.js?v=11122130";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122130";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -45,7 +45,7 @@ const loginBtn = () => $("#g-login").onclick = async () => {
 const logout = () => A.signOut(auth);
 
 function gateLanding() {
-  showGate(`<div class="glogo">🥃</div><h1>술로그</h1>
+  showGate(`<div class="glogo">🥃</div><h1>노모로그</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.</p>
@@ -130,7 +130,7 @@ async function gatePending() {
     <button class="btn ghost" id="g-out">로그아웃</button>`);
   $("#g-out").onclick = logout;
   $("#g-copy").onclick = async () => {
-    const t = `술로그 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.\n${location.href.split("#")[0]}`;
+    const t = `노모로그 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.\n${location.href.split("#")[0]}`;
     try { await navigator.clipboard.writeText(t); toast("복사했어요. 메신저에 붙여 넣으세요"); } catch (e) { toast("복사하지 못했어요"); }
   };
   $("#g-cancel").onclick = async () => { if (await ask("가입 신청을 취소할까요?", "취소하기")) { try { await cancelApplication(); } catch (e) { toast("실패: " + errText(e)); } } };
@@ -507,7 +507,7 @@ function bindQr(root, id) {
   const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
   if (c) cv.src = c.toDataURL("image/png"); else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
   const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
-  const invite = () => `술로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n가입할 때 추천인 아이디에 @${S.member.handle} 를 적어 주세요.` : "");
+  const invite = () => `노모로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n가입할 때 추천인 아이디에 @${S.member.handle} 를 적어 주세요.` : "");
   const png = () => new Promise(r => c.toBlob(r, "image/png"));
   root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
     const k = b.dataset.qr;
