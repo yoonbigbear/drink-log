@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122203";
-import { qrCanvas } from "./qr.js?v=11122203";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122203";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122208";
+import { qrCanvas } from "./qr.js?v=11122208";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122208";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -693,10 +693,26 @@ function renderPhotos() {
   const a = $("#addph"); if (a) a.onclick = () => $("#file").click();
 }
 $("#file").onchange = async e => { const files = [...e.target.files]; e.target.value = ""; for (const f of files) { if (!F || F.photos.length >= 6) break; await addPhoto(f); } };
+// 사진에 GPS 위치가 있으면 주소(와 장소 이름)를 비어 있는 칸에 자동으로 채운다.
+async function fillAddressFromGps(lat, lng, myF) {
+  if (myF.gpsTried) return; myF.gpsTried = true;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=ko&lat=${lat}&lon=${lng}`); const j = await r.json();
+    if (F !== myF || !j || j.error) return;
+    const parts = String(j.display_name || "").split(",").map(x => x.trim()).filter(x => x && !/^\d{3,}(-\d+)?$/.test(x));
+    if (parts.length > 1) parts.pop();   // 맨 끝의 나라 이름
+    if (parts.length > 1 && j.name && parts[0] === j.name) parts.shift();   // 장소 이름은 주소에서 뺀다
+    const addr = parts.slice().reverse().join(" "); if (!addr) return;
+    const ad = $("#f-address"), pl = $("#f-place"); let did = false;
+    if (ad && !ad.value.trim()) { ad.value = addr; did = true; }
+    if (pl && !pl.value.trim() && j.name && j.category !== "highway" && j.category !== "place") { pl.value = j.name; did = true; }
+    if (did) toast("사진의 위치로 주소를 채웠어요 📍");
+  } catch (e) {}
+}
 async function addPhoto(f) {
   const myF = F;
   try { const ex = readExif(await f.arrayBuffer());
-    if (ex) { if (ex.date && !F.whenTouched) { $("#f-when").value = ex.date; F.whenTouched = true; } } } catch (e) {}
+    if (ex) { if (ex.date && !F.whenTouched) { $("#f-when").value = ex.date; F.whenTouched = true; } if (ex.lat != null) fillAddressFromGps(ex.lat, ex.lng, myF); } } catch (e) {}
   const p = { id: rid(), busy: true }; F.photos.push(p); renderPhotos();
   try { const img = await loadImg(f); p.data = toDataUrl(img, ...FULL); p.thumb = toDataUrl(img, ...THUMB); p.preview = p.thumb; p.busy = false; }
   catch (e) { const i = myF.photos.indexOf(p); if (i >= 0) myF.photos.splice(i, 1); toast("이 사진은 열 수 없어요"); }
