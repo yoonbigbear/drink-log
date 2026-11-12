@@ -464,15 +464,15 @@ async function renderProfile(uid) {
 /* ───────────── 나 ───────────── */
 /* ───────────── QR 코드 ───────────── */
 const appUrl = () => "https://yoonbigbear.github.io/drink-log/";
-function qrBlock(id) { return `<div class="qrbox"><canvas id="${id}" class="qrcv"></canvas><div class="dim sm" style="word-break:break-all">${esc(appUrl())}</div>
+function qrBlock(id) { return `<div class="qrbox"><img id="${id}" class="qrcv" alt="앱 주소 QR 코드"><div class="dim sm" style="word-break:break-all">${esc(appUrl())}</div>
   <div class="row"><button class="btn pri" data-qr="img">QR 이미지 복사</button><button class="btn" data-qr="link">링크 복사</button></div>
   <div class="row"><button class="btn" data-qr="invite">초대 문구 복사</button><button class="btn" data-qr="save">이미지 저장</button></div></div>`; }
 function bindQr(root, id) {
   const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
-  if (c) { cv.width = c.width; cv.height = c.height; cv.getContext("2d").drawImage(c, 0, 0); } else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
+  if (c) cv.src = c.toDataURL("image/png"); else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
   const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
   const invite = () => `술로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n가입할 때 추천인 아이디에 @${S.member.handle} 를 적어 주세요.` : "");
-  const png = () => new Promise(r => (c || cv).toBlob(r, "image/png"));
+  const png = () => new Promise(r => c.toBlob(r, "image/png"));
   root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
     const k = b.dataset.qr;
     if (k === "link") return copyText(url, "링크를 복사했어요");
