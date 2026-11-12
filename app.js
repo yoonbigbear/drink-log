@@ -1,7 +1,7 @@
 // 노모로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122130";
-import { qrCanvas } from "./qr.js?v=11122130";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122130";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122131";
+import { qrCanvas } from "./qr.js?v=11122131";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122131";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -36,6 +36,7 @@ const phandle = u => people.get(u)?.handle || "";
 const avatar = (u, cls = "") => `<div class="avatar ${cls}">${esc(initial(pname(u)))}</div>`;
 
 /* ───────────── 로그인 · 가입 · 승인 대기 (gate) ───────────── */
+const REF0 = (new URLSearchParams(location.search).get("ref") || "").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
 const gate = $("#gate");
 function showGate(html) { $("#app").classList.add("hide"); closeSheet(); gate.classList.remove("hide"); gate.scrollTop = 0; gate.innerHTML = `<div class="gbox">${html}</div>`; }
 const loginBtn = () => $("#g-login").onclick = async () => {
@@ -48,7 +49,7 @@ function gateLanding() {
   showGate(`<div class="glogo">🥃</div><h1>노모로그</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
-    <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.</p>
+    <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
     <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}`);
   loginBtn(); bindQr($("#gate"), "qr-gate");
 }
@@ -96,6 +97,7 @@ function gateSignup() {
         box.innerHTML = `<div class="refcard">${avatar(u)}<div><b>${esc(ms.data().displayName)}</b><div class="dim sm">@${esc(ms.data().handle)} · 추천인으로 선택됨 ✓</div></div></div>`;
       } catch (er) { box.innerHTML = `<div class="err">검색 실패: ${errText(er)}</div>`; }
     };
+    if (REF0) { $("#g-ref").value = REF0; search(); }
     $("#g-search").onclick = search; $("#g-ref").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); search(); } };
   }
   $("#g-submit").onclick = async () => {
@@ -499,15 +501,16 @@ async function renderProfile(uid) {
 
 /* ───────────── 나 ───────────── */
 /* ───────────── QR 코드 ───────────── */
-const appUrl = () => "https://yoonbigbear.github.io/drink-log/";
-function qrBlock(id) { return `<div class="qrbox"><img id="${id}" class="qrcv" alt="앱 주소 QR 코드"><div class="dim sm" style="word-break:break-all">${esc(appUrl())}</div>
+const BASE = "https://yoonbigbear.github.io/drink-log/";
+const appUrl = () => BASE + (S.member?.status === "active" && S.member.handle ? "?ref=" + encodeURIComponent(S.member.handle) : "");
+function qrBlock(id) { return `<div class="qrbox"><img id="${id}" class="qrcv" alt="앱 주소 QR 코드"><div class="dim sm" style="word-break:break-all">${esc(appUrl())}</div>${S.member?.status === "active" ? `<div class="hint">이 QR로 들어오면 추천인에 <b>@${esc(S.member.handle)}</b>가 자동으로 입력돼요.</div>` : ""}
   <div class="row"><button class="btn pri" data-qr="img">QR 이미지 복사</button><button class="btn" data-qr="link">링크 복사</button></div>
   <div class="row"><button class="btn" data-qr="invite">초대 문구 복사</button><button class="btn" data-qr="save">이미지 저장</button></div></div>`; }
 function bindQr(root, id) {
   const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
   if (c) cv.src = c.toDataURL("image/png"); else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
   const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
-  const invite = () => `노모로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n가입할 때 추천인 아이디에 @${S.member.handle} 를 적어 주세요.` : "");
+  const invite = () => `노모로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n추천인 아이디: @${S.member.handle}` : "");
   const png = () => new Promise(r => c.toBlob(r, "image/png"));
   root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
     const k = b.dataset.qr;

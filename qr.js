@@ -1,6 +1,6 @@
-// 작은 QR 코드 생성기 (바이트 모드, 오류정정 M, 버전 1~4 → 최대 62바이트).
+// 작은 QR 코드 생성기 (바이트 모드, 오류정정 M, 버전 1~5 → 최대 84바이트).
 // 외부 라이브러리 없이 앱 주소 같은 짧은 문자열만 만든다. 너무 길면 null 을 돌려준다.
-const VER = [null, { data: 16, ec: 10, blocks: 1 }, { data: 28, ec: 16, blocks: 1 }, { data: 44, ec: 26, blocks: 1 }, { data: 64, ec: 18, blocks: 2 }];
+const VER = [null, { data: 16, ec: 10, blocks: 1 }, { data: 28, ec: 16, blocks: 1 }, { data: 44, ec: 26, blocks: 1 }, { data: 64, ec: 18, blocks: 2 }, { data: 86, ec: 24, blocks: 2 }];
 
 // GF(256) 계산 표 (다항식 0x11d)
 const EXP = new Array(512), LOG = new Array(256);
@@ -55,8 +55,8 @@ function penalty(m) {
 // 문자열 → 불리언 2차원 배열 (true = 검은 칸). 담을 수 없으면 null.
 export function qrMatrix(text) {
   const bytes = [...new TextEncoder().encode(text)];
-  let v = 1; while (v <= 4 && bytes.length + 2 > VER[v].data) v++;
-  if (v > 4) return null;
+  let v = 1; while (v <= 5 && bytes.length + 2 > VER[v].data) v++;
+  if (v > 5) return null;
   const size = 17 + 4 * v; const cw = interleave(dataCodewords(bytes, v), v);
   const mod = Array.from({ length: size }, () => new Array(size).fill(false)), fn = Array.from({ length: size }, () => new Array(size).fill(false));
   let T = mod; const set = (x, y, dark) => { if (x >= 0 && y >= 0 && x < size && y < size) { T[y][x] = dark; fn[y][x] = true; } };
