@@ -36,7 +36,7 @@ export function parseCoord(s) {
 }
 export function mapLinks(it) {
   const nm = it.place || it.name || ""; const has = it.lat != null && it.lng != null; const L = [];
-  if (has) { L.push(["카카오맵", `https://map.kakao.com/link/map/${encodeURIComponent(nm || "위치")},${it.lat},${it.lng}`]); L.push(["구글맵", `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lng}`]); }
+  if (has) { L.push(["구글맵", `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lng}`]); L.push(["카카오맵", `https://map.kakao.com/link/map/${encodeURIComponent(nm || "위치")},${it.lat},${it.lng}`]); }
   else if (it.place) { const q = encodeURIComponent((it.place + " " + (it.address || "")).trim()); L.push(["카카오맵 검색", `https://map.kakao.com/link/search/${q}`]); L.push(["네이버지도 검색", `https://map.naver.com/p/search/${q}`]); }
   if (it.mapLink && /^https?:\/\//i.test(it.mapLink)) L.push(["저장한 링크", it.mapLink]);
   return L.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${t} ↗</a>`).join("");

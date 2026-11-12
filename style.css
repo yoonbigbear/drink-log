@@ -185,3 +185,4 @@ nav .tab{position:relative}
 .qrbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center;margin-bottom:12px}
 .qrcv{width:220px;height:220px;max-width:100%;border-radius:10px;background:#fff;display:block;margin:0 auto 10px;image-rendering:pixelated}
 .qrbox .row{margin-top:8px}
+.minimap{overflow:hidden}.gmap{width:100%;height:100%;border:0;display:block}

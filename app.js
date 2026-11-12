@@ -352,8 +352,7 @@ function renderDetail(it, kind) {
   </div>`;
   $("#s-back").onclick = back;
   sheet.querySelectorAll(".gallery img[data-pid]").forEach(async img => { try { const d = await fullPhoto(img.dataset.pid); if (d && img.isConnected) img.src = d; } catch (e) {} });
-  if (it.lat != null) setTimeout(() => { const el = $("#d-map"); if (!el) return; const m = makeMap(el, { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-    m.setView([it.lat, it.lng], 16); dot([it.lat, it.lng]).addTo(m); }, 280);
+  if (it.lat != null) { const el = $("#d-map"); if (el) el.innerHTML = `<iframe class="gmap" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${it.lat},${it.lng}&z=16&output=embed"></iframe>`; }
   const prof = sheet.querySelector("[data-prof]"); if (prof) prof.onclick = () => nav(() => renderProfile(owner));
   bindFollow();
   if (isMine) {
@@ -540,7 +539,7 @@ function openForm(it, pre) {
   sheet.innerHTML = `<div class="sbar"><button class="btn ghost" id="f-cancel">취소</button><h2>${it ? "기록 수정" : "새 기록"}</h2><button class="btn pri" id="f-save">저장</button></div>
   <form class="sbody" id="form" autocomplete="off">
     <fieldset><legend>주종</legend><div class="chips" id="f-cats">${CATS.map(c => `<button type="button" class="chip ${F.cat === c.key ? "on" : ""}" data-k="${esc(c.key)}">${c.icon} ${esc(c.key)}</button>`).join("")}</div></fieldset>
-    <fieldset><legend>사진</legend><div class="photos" id="photos"></div><div class="hint">사진에 위치·촬영 시간이 남아 있으면 자동으로 채워져요. 최대 6장.</div></fieldset>
+    <fieldset><legend>사진 (필수)</legend><div class="photos" id="photos"></div><div class="hint">사진에 위치·촬영 시간이 남아 있으면 자동으로 채워져요. 최대 6장.</div></fieldset>
     <fieldset><legend>술</legend>
       <label>이름 *</label><input class="inp" id="f-name" value="${esc(d.name)}" placeholder="예: 글렌드로낙 15, 지역 막걸리 이름 등">
       <div class="row"><div><label>세부 종류</label><input class="inp" id="f-subtype" list="dl-sub" value="${esc(d.subtype)}"></div><div><label id="l-producer">생산자</label><input class="inp" id="f-producer" value="${esc(d.producer)}"></div></div>
@@ -553,7 +552,8 @@ function openForm(it, pre) {
       <label>장소 이름</label><input class="inp" id="f-place" value="${esc(d.place)}" placeholder="바, 식당, 양조장, 집…">
       <label>주소 (선택)</label><input class="inp" id="f-address" value="${esc(d.address)}">
       <label>좌표 또는 지도 링크</label><input class="inp" id="f-coord" value="${esc(d.mapLink || coordStr)}" placeholder="37.5665, 126.9780 또는 지도 링크"><div id="coordmsg"></div>
-      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-pick">🗺️ 지도에서 고르기</button></div>
+      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-pick">🗺️ 지도에서 고르기</button><button type="button" class="btn" id="f-gmap">구글맵에서 열기 ↗</button></div>
+      <div class="hint">구글맵에서 장소를 찾은 뒤, 핀을 길게 눌러 나온 좌표(또는 주소창의 긴 링크)를 위 칸에 붙여넣으면 돼요.</div>
       <div id="pickmap" class="pickmap hide"></div>
     </fieldset>
     <fieldset><legend>시간 · 가격</legend>
@@ -571,6 +571,7 @@ function openForm(it, pre) {
     </fieldset>
     <fieldset><legend>공유</legend>
       <div class="seg" id="f-share"><button type="button" data-s="0" class="${F.share ? "" : "on"}">🔒 나만 보기</button><button type="button" data-s="1" class="${F.share ? "on" : ""}">👥 멤버에게 공유</button></div>
+      <div class="hint" id="f-sharehint">${F.share ? "공유하면 승인된 멤버에게 보이고, 나를 팔로우한 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."}</div>
       <div class="sharebox ${F.share ? "" : "hide"}" id="sharebox">
         <label class="opt"><input type="checkbox" id="f-reco" ${F.reco ? "checked" : ""}> 👍 이 술을 추천해요</label>
         <input class="inp" id="f-recoline" maxlength="80" value="${esc(d.recoLine)}" placeholder="추천 한마디 (예: 비 오는 날 혼술로 딱)">
@@ -594,7 +595,7 @@ function openForm(it, pre) {
   const addTag = () => { const v = $("#f-newtag").value.trim(); if (!v) return; $("#f-newtag").value = ""; F.tags.add(v); renderAromas(); };
   $("#f-addtag").onclick = addTag; $("#f-newtag").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } };
   $("#f-share").onclick = e => { const b = e.target.closest("[data-s]"); if (!b) return; F.share = b.dataset.s === "1";
-    document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); };
+    document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); $("#f-sharehint").textContent = F.share ? "공유하면 승인된 멤버에게 보이고, 나를 팔로우한 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."; };
   if ($("#recent")) $("#recent").onclick = e => { const c = e.target.closest("[data-i]"); if (!c) return; const b = recent[+c.dataset.i];
     $("#f-place").value = b.place; $("#f-address").value = b.address || ""; $("#f-coord").value = b.mapLink || (b.lat != null ? `${b.lat}, ${b.lng}` : ""); updateCoordMsg(); syncPickMarker(); };
   $("#f-here").onclick = () => { if (!navigator.geolocation) return toast("이 브라우저는 위치를 지원하지 않아요"); toast("현재 위치를 찾는 중…");
@@ -603,6 +604,8 @@ function openForm(it, pre) {
     try { const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(q)}`); const j = await r.json();
       if (!j.length) return toast("찾지 못했어요. 지도에서 골라 주세요"); setCoord(+j[0].lat, +j[0].lon);
       if (!$("#f-address").value.trim()) $("#f-address").value = j[0].display_name.split(",").slice(0, 4).join(","); toast("위치를 찾았어요. 지도에서 확인해 보세요"); showPickMap(); } catch (e) { toast("검색 실패"); } };
+  $("#f-gmap").onclick = () => { const c = parseCoord($("#f-coord").value); const q = c ? `${c.lat},${c.lng}` : ($("#f-place").value.trim() + " " + $("#f-address").value.trim()).trim();
+    window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q || "서울"), "_blank", "noopener"); };
   $("#f-pick").onclick = () => { const el = $("#pickmap"); if (el.classList.contains("hide")) showPickMap(); else el.classList.add("hide"); };
   if ($("#f-del")) $("#f-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) { const x = it; F = null; await deleteLog(x); } };
 }
@@ -676,6 +679,7 @@ function projection(l, uid) {
 async function save() {
   if (!F) return;
   if (F.photos.some(p => p.busy)) return toast("사진 처리가 끝나면 저장할 수 있어요");
+  if (!F.photos.length) return toast("사진을 한 장 이상 올려 주세요 📷");
   const v = id => $(id).value.trim(); const name = v("#f-name"); if (!name) { toast("이름을 입력해 주세요"); $("#f-name").focus(); return; }
   const cs = v("#f-coord"); const c = parseCoord(cs); const uid = me();
   const id = F.id || FS.doc(col("private", uid, "logs")).id; const btn = $("#f-save"); btn.disabled = true; btn.textContent = "저장 중…";
