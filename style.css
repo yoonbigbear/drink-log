@@ -181,3 +181,7 @@ nav .tab{position:relative}
 .inbox .row .btn{padding:8px}
 .gate .note p{font-size:14px}
 .refcard{background:var(--panel);border:1px solid var(--green);border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;gap:10px;align-items:center}
+
+.qrbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center;margin-bottom:12px}
+.qrcv{width:220px;height:220px;max-width:100%;border-radius:10px;background:#fff;display:block;margin:0 auto 10px;image-rendering:pixelated}
+.qrbox .row{margin-top:8px}

@@ -1,5 +1,6 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
 import { A, FS, auth, db, OWNER } from "./fb.js";
+import { qrCanvas } from "./qr.js";
 import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, makeMap, dot, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js";
 
 const CATS = window.CATEGORIES;
@@ -243,6 +244,7 @@ function renderFeed() {
 $("#feedlist").addEventListener("click", e => { const c = e.target.closest(".post"); if (c) openPost(c.dataset.id); });
 $("#feedbar").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (b) { S.reco = b.dataset.f === "reco"; renderFeed(); } });
 $("#findpeople").onclick = () => nav(renderPeople);
+$("#qrchip").onclick = () => nav(renderQr);
 $("#refresh").onclick = () => { loadFeed(); toast("새로고침했어요"); };
 function openPost(id) { const p = S.feed.find(x => x.id === id); if (p) nav(() => renderDetail(S.feed.find(x => x.id === id) || p, "post"), {}); }
 
@@ -459,6 +461,31 @@ async function renderProfile(uid) {
 }
 
 /* ───────────── 나 ───────────── */
+/* ───────────── QR 코드 ───────────── */
+const appUrl = () => location.origin + location.pathname;
+function qrBlock(id) { return `<div class="qrbox"><canvas id="${id}" class="qrcv"></canvas><div class="dim sm" style="word-break:break-all">${esc(appUrl())}</div>
+  <div class="row"><button class="btn pri" data-qr="img">QR 이미지 복사</button><button class="btn" data-qr="link">링크 복사</button></div>
+  <div class="row"><button class="btn" data-qr="invite">초대 문구 복사</button><button class="btn" data-qr="save">이미지 저장</button></div></div>`; }
+function bindQr(root, id) {
+  const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
+  if (c) { cv.width = c.width; cv.height = c.height; cv.getContext("2d").drawImage(c, 0, 0); } else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
+  const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
+  const invite = () => `술로그에 초대해요 🥃\n${url}\n가입할 때 추천인 아이디에 @${S.member?.handle || ""} 를 적어 주세요.`;
+  const png = () => new Promise(r => (c || cv).toBlob(r, "image/png"));
+  root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
+    const k = b.dataset.qr;
+    if (k === "link") return copyText(url, "링크를 복사했어요");
+    if (k === "invite") return copyText(invite(), "초대 문구를 복사했어요");
+    if (k === "save") { const a = document.createElement("a"); a.download = "drinklog-qr.png"; a.href = URL.createObjectURL(await png()); a.click(); return toast("이미지를 저장했어요"); }
+    try { await navigator.clipboard.write([new ClipboardItem({ "image/png": png() })]); toast("QR 이미지를 복사했어요"); }
+    catch { toast("이 브라우저는 이미지 복사를 못해요. 이미지 저장을 써 주세요"); }
+  });
+}
+function renderQr() {
+  sheet.innerHTML = `${bar("QR 코드")}<div class="sbody">${qrBlock("qr-main")}<div class="hint">친구가 이 QR로 접속해 가입하면, 추천인 칸에 내 아이디 <b>@${esc(S.member?.handle || "")}</b>를 적게 하세요.</div></div>`;
+  $("#s-back").onclick = back; bindQr(sheet, "qr-main");
+}
+
 function renderMe() {
   const el = $("#me"); if (!el || !S.member) return; const m = S.member;
   const pend = pendingList(); const act = S.invitees.filter(i => i.status === "active");
@@ -467,10 +494,12 @@ function renderMe() {
     <div class="row" style="justify-content:center"><button class="btn" id="me-edit" style="flex:0 0 auto">프로필 수정</button><button class="btn" id="me-view" style="flex:0 0 auto">내 공유글 보기</button></div></div>
     ${pend.length ? `<div class="sec">가입 승인 요청 (${pend.length})</div>` + pend.map(p => `<div class="person inbox">${avatar(p.uid)}<div class="pi"><b>${esc(p.displayName)}</b><span class="dim sm">@${esc(p.handle)} 님이 나를 추천인으로 지정했어요</span></div></div>
       <div class="row" style="margin:-4px 0 12px"><button class="btn" data-rej="${esc(p.uid)}">거절</button><button class="btn pri" data-acc="${esc(p.uid)}">승인</button></div>`).join("") : ""}
+    <div class="sec">QR 코드로 초대하기</div>${qrBlock("qr-me")}
     <div class="sec">내가 추천한 멤버 (${act.length})</div>
     ${act.length ? act.map(personRow).join("") : `<div class="hint">아직 없어요. 친구가 가입할 때 내 아이디 <b>@${esc(m.handle)}</b>를 추천인으로 적으면, 여기서 승인할 수 있어요.</div>`}
     <div class="sec">내 추천인</div><div class="hint" id="me-ref">${m.referrerUid ? "불러오는 중…" : "첫 멤버(관리자)예요."}</div>
     <div class="sec">계정</div><button class="btn danger" id="me-out" style="width:100%">로그아웃</button>`;
+  bindQr(el, "qr-me");
   $("#me-out").onclick = logout;
   $("#me-edit").onclick = () => nav(renderEditProfile);
   $("#me-view").onclick = () => nav(() => renderProfile(me()));
