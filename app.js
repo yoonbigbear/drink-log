@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122223";
-import { qrCanvas } from "./qr.js?v=11122223";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122223";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122353";
+import { qrCanvas } from "./qr.js?v=11122353";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122353";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -299,8 +299,6 @@ function renderMine() {
   const all = S.mine;
   $("#s-total").textContent = all.length;
   $("#s-places").textContent = new Set(all.map(i => (i.place || "").trim()).filter(Boolean)).size;
-  const ym = nowLocal().slice(0, 7);
-  $("#s-month").textContent = won(all.filter(i => (i.when || "").startsWith(ym)).reduce((a, i) => a + (+i.price || 0), 0));
   const present = CATS.filter(c => all.some(i => i.category === c.key));
   if (S.cat && !present.some(c => c.key === S.cat)) S.cat = "";
   $("#catfilter").innerHTML = present.length > 1 ? `<button class="chip ${S.cat ? "" : "on"}" data-c="">전체</button>` + present.map(c => `<button class="chip ${S.cat === c.key ? "on" : ""}" data-c="${esc(c.key)}">${c.icon} ${esc(c.key)} ${all.filter(i => i.category === c.key).length}</button>`).join("") : "";
