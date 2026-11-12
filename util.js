@@ -36,17 +36,12 @@ export function parseCoord(s) {
 }
 export function mapLinks(it) {
   const nm = it.place || it.name || ""; const has = it.lat != null && it.lng != null; const L = [];
-  if (has) { L.push(["구글맵", `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lng}`]); L.push(["카카오맵", `https://map.kakao.com/link/map/${encodeURIComponent(nm || "위치")},${it.lat},${it.lng}`]); }
-  else if (it.place) { const q = encodeURIComponent((it.place + " " + (it.address || "")).trim()); L.push(["카카오맵 검색", `https://map.kakao.com/link/search/${q}`]); L.push(["네이버지도 검색", `https://map.naver.com/p/search/${q}`]); }
+  if (has) { L.push(["구글맵", `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lng}`]); }
+  else if (it.place) { const q = encodeURIComponent((it.place + " " + (it.address || "")).trim()); L.push(["구글맵 검색", `https://www.google.com/maps/search/?api=1&query=${q}`]); }
   if (it.mapLink && /^https?:\/\//i.test(it.mapLink)) L.push(["저장한 링크", it.mapLink]);
   return L.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${t} ↗</a>`).join("");
 }
 
-// 지도 (Leaflet 전역 L)
-const TILE = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
-export function makeMap(el, opts = {}) { const m = L.map(el, Object.assign({ zoomControl: true, attributionControl: true }, opts)); L.tileLayer(TILE, { attribution: ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(m); return m; }
-export const dot = ll => L.circleMarker(ll, { radius: 8, color: "#1a120b", weight: 2, fillColor: "#f2bd66", fillOpacity: 1 });
 
 // 이미지
 export function loadImg(file) {

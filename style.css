@@ -86,12 +86,7 @@ textarea.inp{min-height:68px;resize:vertical}
 .locbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .locbtns .btn{font-size:13px;padding:7px 11px}
 .pickmap{height:260px;border-radius:12px;margin-top:8px;border:1px solid var(--line)}
-.bigmap{height:300px;border-radius:var(--r);border:1px solid var(--line);margin:8px 0 12px}
 .minimap{height:170px;border-radius:12px;border:1px solid var(--line);margin-top:10px}
-.leaflet-container{background:#1d1814;font:inherit}
-.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink)}
-.leaflet-popup-content{margin:10px 12px;font-size:13px}
-.leaflet-popup-content b{font-size:14px}
 .gallery{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:8px;margin:0 -16px 14px;padding:0 16px}
 .gallery img{flex:none;width:86%;max-width:520px;aspect-ratio:4/5;object-fit:cover;border-radius:14px;scroll-snap-align:center;background:var(--panel2)}
 .gallery img:only-child{width:100%}

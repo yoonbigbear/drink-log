@@ -1,7 +1,7 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
 import { A, FS, auth, db, OWNER } from "./fb.js";
 import { qrCanvas } from "./qr.js";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, makeMap, dot, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -15,7 +15,6 @@ const S = { user: null, member: null, started: false, tab: "feed",
   mine: [], following: new Set(), invitees: [], feed: [], feedState: "idle", reco: false, q: "", cat: "" };
 const people = new Map();           // uid -> member 문서 (없으면 null)
 let stopFns = [], F = null, D = null, stack = [];
-let bigMap = null, bigLayer = null;
 const sheet = $("#sheet");
 
 /* ───────────── 공통 ───────────── */
@@ -186,7 +185,7 @@ function startApp() {
 }
 function stopApp() {
   stopFns.forEach(f => f()); stopFns = []; S.started = false; S.mine = []; S.following = new Set(); S.invitees = []; S.feed = []; S.feedState = "idle";
-  stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; S.follow = false; if (bigMap) { bigMap.remove(); bigMap = null; bigLayer = null; }
+  stack = []; F = null; D = null; S.tab = "feed"; S.q = ""; S.cat = ""; S.reco = false; S.follow = false;
 }
 
 /* ───────────── 탭 ───────────── */
@@ -295,20 +294,13 @@ function placeIndex() {
   return [...m.values()].sort((a, b) => b.last.localeCompare(a.last));
 }
 function renderPlaces() {
-  const P = placeIndex(); const withLL = P.filter(p => p.lat != null);
-  $("#map").classList.toggle("hide", !withLL.length);
-  if (withLL.length) {
-    if (!bigMap) { bigMap = makeMap($("#map")); bigLayer = L.layerGroup().addTo(bigMap); }
-    bigLayer.clearLayers();
-    withLL.forEach(p => dot([p.lat, p.lng]).bindPopup(`<b>${esc(p.place)}</b><br>${p.n}잔 · ${[...p.cats].map(c => (CAT[c] || CAT["기타"]).icon).join("")}<br><a href="#" data-pf="${esc(p.place)}">기록 보기 →</a>`).addTo(bigLayer));
-    setTimeout(() => { bigMap.invalidateSize(); bigMap.fitBounds(L.latLngBounds(withLL.map(p => [p.lat, p.lng])).pad(0.3), { maxZoom: 15 }); }, 50);
-  }
+  const P = placeIndex();
   $("#places").innerHTML = P.length ? P.map(p => `<div class="place">
     <div class="pn">${esc(p.place)}<span>${p.n}잔 ${[...p.cats].map(c => (CAT[c] || CAT["기타"]).icon).join("")}</span></div>
     <div class="pm">마지막 방문 ${esc(fmtDay(p.last))}${p.pc ? " · 평균 " + won(p.sum / p.pc) : ""}${p.address ? " · " + esc(p.address) : ""}</div>
     ${p.best ? `<div class="pm">최고 평점: ${esc(p.best.name)} ${stars(p.best.rating)}</div>` : ""}
     <div class="maps">${mapLinks(p)}</div><button class="linkbtn" data-pf="${esc(p.place)}">이곳의 기록 보기 →</button></div>`).join("")
-    : `<div class="empty"><div class="big">📍</div>기록에 장소를 넣으면 여기와 지도에 모여요.<br><span class="hint">장소는 내 기록에서만 모아 보여요.</span></div>`;
+    : `<div class="empty"><div class="big">📍</div>기록에 장소를 넣으면 여기에 모여요.<br><span class="hint">장소는 내 기록에서만 모아 보여요.</span></div>`;
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-pf]"); if (!b) return; e.preventDefault();
   S.q = b.dataset.pf; S.cat = ""; $("#q").value = S.q; $("#qclear").classList.remove("hide"); setTab("mine"); });
@@ -529,7 +521,7 @@ function openForm(it, pre) {
   const d = Object.assign({}, pre || {}, it || {}); const o = d.shareOpts || {};
   F = { id: it?.id || null, createdAt: it?.createdAt || null, wasShared: !!it?.shared,
     photos: (it?.photos || []).map(p => ({ ...p })), removed: [], origFirstId: it?.photos?.[0]?.id || null, origThumb: it?.thumb || "", tags: new Set(it?.tags || []), rating: it?.rating || 0,
-    whenTouched: !!it, cat: d.category || S.mine[0]?.category || "위스키", pickMap: null, pickMarker: null,
+    whenTouched: !!it, cat: d.category || S.mine[0]?.category || "위스키", 
     share: !!it?.shared, sPrice: o.price ?? false, sPlace: o.place || "name", sNote: o.note ?? true, reco: !!d.recommend };
   const coordStr = d.lat != null ? `${d.lat}, ${d.lng}` : ""; const recent = placeIndex().slice(0, 10);
   nav(() => {}, {});  // 스택에 자리만 잡고 아래에서 내용을 그린다
@@ -550,7 +542,7 @@ function openForm(it, pre) {
       <label>장소 이름</label><input class="inp" id="f-place" value="${esc(d.place)}" placeholder="바, 식당, 양조장, 집…">
       <label>주소 (선택)</label><input class="inp" id="f-address" value="${esc(d.address)}">
       <label>좌표 또는 지도 링크</label><input class="inp" id="f-coord" value="${esc(d.mapLink || coordStr)}" placeholder="37.5665, 126.9780 또는 지도 링크"><div id="coordmsg"></div>
-      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-pick">🗺️ 지도에서 고르기</button><button type="button" class="btn" id="f-gmap">구글맵에서 열기 ↗</button></div>
+      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-pick">🗺️ 구글맵으로 확인</button><button type="button" class="btn" id="f-gmap">구글맵에서 열기 ↗</button></div>
       <div class="hint">구글맵에서 장소를 찾은 뒤, 핀을 길게 눌러 나온 좌표(또는 주소창의 긴 링크)를 위 칸에 붙여넣으면 돼요.</div>
       <div id="pickmap" class="pickmap hide"></div>
     </fieldset>
@@ -601,7 +593,7 @@ function openForm(it, pre) {
   $("#f-geocode").onclick = async () => { const q = $("#f-address").value.trim() || $("#f-place").value.trim(); if (!q) return toast("주소나 장소 이름을 먼저 적어 주세요");
     try { const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(q)}`); const j = await r.json();
       if (!j.length) return toast("찾지 못했어요. 지도에서 골라 주세요"); setCoord(+j[0].lat, +j[0].lon);
-      if (!$("#f-address").value.trim()) $("#f-address").value = j[0].display_name.split(",").slice(0, 4).join(","); toast("위치를 찾았어요. 지도에서 확인해 보세요"); showPickMap(); } catch (e) { toast("검색 실패"); } };
+      if (!$("#f-address").value.trim()) $("#f-address").value = j[0].display_name.split(",").slice(0, 4).join(","); toast("위치를 찾았어요. 구글맵으로 확인해 보세요"); showPickMap(); } catch (e) { toast("검색 실패"); } };
   $("#f-gmap").onclick = () => { const c = parseCoord($("#f-coord").value); const q = c ? `${c.lat},${c.lng}` : ($("#f-place").value.trim() + " " + $("#f-address").value.trim()).trim();
     window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q || "서울"), "_blank", "noopener"); };
   $("#f-pick").onclick = () => { const el = $("#pickmap"); if (el.classList.contains("hide")) showPickMap(); else el.classList.add("hide"); };
@@ -613,23 +605,17 @@ function applyCat() {
 }
 function renderAromas() { const c = CAT[F.cat] || CAT["기타"]; const list = [...new Set([...(c.aromas || []), ...F.tags])];
   $("#aromas").innerHTML = list.map(a => `<button type="button" class="chip ${F.tags.has(a) ? "on" : ""}" data-t="${esc(a)}">${esc(a)}</button>`).join(""); }
-function setCoord(la, lo) { la = +la.toFixed(6); lo = +lo.toFixed(6); $("#f-coord").value = `${la}, ${lo}`; updateCoordMsg(); syncPickMarker(true); }
-function showPickMap() {
-  const el = $("#pickmap"); el.classList.remove("hide"); const c = parseCoord($("#f-coord").value);
-  if (!F.pickMap) { F.pickMap = makeMap(el); F.pickMarker = null; F.pickMap.setView(c ? [c.lat, c.lng] : [37.5665, 126.978], c ? 16 : 12); F.pickMap.on("click", e => setCoord(e.latlng.lat, e.latlng.lng)); }
-  setTimeout(() => { F.pickMap.invalidateSize(); syncPickMarker(true); }, 50);
-}
-function syncPickMarker(pan) {
-  if (!F || !F.pickMap) return; const c = parseCoord($("#f-coord").value);
-  if (!c) { if (F.pickMarker) { F.pickMarker.remove(); F.pickMarker = null; } return; }
-  if (!F.pickMarker) F.pickMarker = dot([c.lat, c.lng]).addTo(F.pickMap); else F.pickMarker.setLatLng([c.lat, c.lng]);
-  if (pan) F.pickMap.setView([c.lat, c.lng], Math.max(F.pickMap.getZoom(), 15));
+function setCoord(la, lo) { la = +la.toFixed(6); lo = +lo.toFixed(6); $("#f-coord").value = `${la}, ${lo}`; updateCoordMsg(); syncPickMarker(); }
+function showPickMap() { const el = $("#pickmap"); el.classList.remove("hide"); syncPickMarker(); }
+function syncPickMarker() {
+  const el = $("#pickmap"); if (!F || !el || el.classList.contains("hide")) return; const c = parseCoord($("#f-coord").value);
+  el.innerHTML = c ? `<iframe class="gmap" loading="lazy" src="https://www.google.com/maps?q=${c.lat},${c.lng}&z=16&output=embed"></iframe>` : `<div class="hint" style="padding:14px">좌표를 넣으면 구글맵으로 위치를 보여줘요.</div>`;
 }
 function renderRate() { document.querySelectorAll("#rate button").forEach(b => b.classList.toggle("on", +b.dataset.n <= F.rating)); }
 function updateCoordMsg() {
   const v = $("#f-coord").value.trim(); const c = parseCoord(v); const m = $("#coordmsg");
   if (!v) m.innerHTML = ""; else if (c) m.innerHTML = `<div class="ok">✓ 좌표 ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</div>`;
-  else if (/^https?:\/\//i.test(v)) m.innerHTML = `<div class="hint">링크로 저장돼요. (단축 링크라 좌표는 읽지 못했어요 — 지도에서 골라도 돼요)</div>`;
+  else if (/^https?:\/\//i.test(v)) m.innerHTML = `<div class="hint">링크로 저장돼요. (단축 링크라 좌표는 읽지 못했어요 — 구글맵으로 확인해 보세요)</div>`;
   else m.innerHTML = `<div class="err">좌표 형식을 읽지 못했어요. 예: 37.5665, 126.9780</div>`;
 }
 
