@@ -1,7 +1,7 @@
 // 술로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122114";
-import { qrCanvas } from "./qr.js?v=11122114";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122114";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122120";
+import { qrCanvas } from "./qr.js?v=11122120";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122120";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -542,9 +542,8 @@ function openForm(it, pre) {
       <label>장소 이름</label><input class="inp" id="f-place" value="${esc(d.place)}" placeholder="바, 식당, 양조장, 집…">
       <label>주소 (선택)</label><input class="inp" id="f-address" value="${esc(d.address)}">
       <label>좌표 또는 지도 링크</label><input class="inp" id="f-coord" value="${esc(d.mapLink || coordStr)}" placeholder="37.5665, 126.9780 또는 지도 링크"><div id="coordmsg"></div>
-      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-pick">🗺️ 구글맵으로 확인</button><button type="button" class="btn" id="f-gmap">구글맵에서 열기 ↗</button></div>
+      <div class="locbtns"><button type="button" class="btn" id="f-here">📍 현재 위치</button><button type="button" class="btn" id="f-geocode">🔎 주소·이름으로 찾기</button><button type="button" class="btn" id="f-gmap">구글맵에서 열기 ↗</button></div>
       <div class="hint">구글맵에서 장소를 찾은 뒤, 핀을 길게 눌러 나온 좌표(또는 주소창의 긴 링크)를 위 칸에 붙여넣으면 돼요.</div>
-      <div id="pickmap" class="pickmap hide"></div>
     </fieldset>
     <fieldset><legend>시간 · 가격</legend>
       <label>마신 시간</label><input class="inp" type="datetime-local" id="f-when" value="${esc(d.when || nowLocal())}">
@@ -578,7 +577,7 @@ function openForm(it, pre) {
   applyCat(); renderPhotos(); renderRate(); updateCoordMsg(); sheet.scrollTop = 0;
   F.photos.forEach(async (p, i) => { if (p.preview) return; if (i === 0 && it?.thumb) p.preview = it.thumb; else { try { p.preview = await thumbFromData(await fullPhoto(p.id)); } catch (e) {} } if (F) renderPhotos(); });
   $("#f-cancel").onclick = cancelForm; $("#f-save").onclick = save; $("#form").onsubmit = e => { e.preventDefault(); save(); };
-  $("#f-when").oninput = () => { F.whenTouched = true; }; $("#f-coord").oninput = () => { updateCoordMsg(); syncPickMarker(); };
+  $("#f-when").oninput = () => { F.whenTouched = true; }; $("#f-coord").oninput = () => { updateCoordMsg() };
   $("#f-cats").onclick = e => { const b = e.target.closest("[data-k]"); if (!b) return; F.cat = b.dataset.k; document.querySelectorAll("#f-cats .chip").forEach(x => x.classList.toggle("on", x === b)); applyCat(); };
   $("#rate").onclick = e => { const b = e.target.closest("[data-n]"); if (!b) return; const n = +b.dataset.n; F.rating = F.rating === n ? 0 : n; renderRate(); };
   $("#aromas").onclick = e => { const b = e.target.closest("[data-t]"); if (!b) return; const t = b.dataset.t; F.tags.has(t) ? F.tags.delete(t) : F.tags.add(t); b.classList.toggle("on"); };
@@ -587,16 +586,15 @@ function openForm(it, pre) {
   $("#f-share").onclick = e => { const b = e.target.closest("[data-s]"); if (!b) return; F.share = b.dataset.s === "1";
     document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); $("#f-sharehint").textContent = F.share ? "공유하면 승인된 모든 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."; };
   if ($("#recent")) $("#recent").onclick = e => { const c = e.target.closest("[data-i]"); if (!c) return; const b = recent[+c.dataset.i];
-    $("#f-place").value = b.place; $("#f-address").value = b.address || ""; $("#f-coord").value = b.mapLink || (b.lat != null ? `${b.lat}, ${b.lng}` : ""); updateCoordMsg(); syncPickMarker(); };
+    $("#f-place").value = b.place; $("#f-address").value = b.address || ""; $("#f-coord").value = b.mapLink || (b.lat != null ? `${b.lat}, ${b.lng}` : ""); updateCoordMsg() };
   $("#f-here").onclick = () => { if (!navigator.geolocation) return toast("이 브라우저는 위치를 지원하지 않아요"); toast("현재 위치를 찾는 중…");
     navigator.geolocation.getCurrentPosition(p => { setCoord(p.coords.latitude, p.coords.longitude); toast("현재 위치를 넣었어요"); }, e => toast(e.code === 1 ? "위치 권한이 거부됐어요" : "위치를 찾지 못했어요"), { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }); };
   $("#f-geocode").onclick = async () => { const q = $("#f-address").value.trim() || $("#f-place").value.trim(); if (!q) return toast("주소나 장소 이름을 먼저 적어 주세요");
     try { const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(q)}`); const j = await r.json();
       if (!j.length) return toast("찾지 못했어요. 지도에서 골라 주세요"); setCoord(+j[0].lat, +j[0].lon);
-      if (!$("#f-address").value.trim()) $("#f-address").value = j[0].display_name.split(",").slice(0, 4).join(","); toast("위치를 찾았어요. 구글맵으로 확인해 보세요"); showPickMap(); } catch (e) { toast("검색 실패"); } };
+      if (!$("#f-address").value.trim()) $("#f-address").value = j[0].display_name.split(",").slice(0, 4).join(","); toast("위치를 찾았어요"); } catch (e) { toast("검색 실패"); } };
   $("#f-gmap").onclick = () => { const c = parseCoord($("#f-coord").value); const q = c ? `${c.lat},${c.lng}` : ($("#f-place").value.trim() + " " + $("#f-address").value.trim()).trim();
     window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q || "서울"), "_blank", "noopener"); };
-  $("#f-pick").onclick = () => { const el = $("#pickmap"); if (el.classList.contains("hide")) showPickMap(); else el.classList.add("hide"); };
   if ($("#f-del")) $("#f-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) { const x = it; F = null; await deleteLog(x); } };
 }
 function applyCat() {
@@ -605,12 +603,7 @@ function applyCat() {
 }
 function renderAromas() { const c = CAT[F.cat] || CAT["기타"]; const list = [...new Set([...(c.aromas || []), ...F.tags])];
   $("#aromas").innerHTML = list.map(a => `<button type="button" class="chip ${F.tags.has(a) ? "on" : ""}" data-t="${esc(a)}">${esc(a)}</button>`).join(""); }
-function setCoord(la, lo) { la = +la.toFixed(6); lo = +lo.toFixed(6); $("#f-coord").value = `${la}, ${lo}`; updateCoordMsg(); syncPickMarker(); }
-function showPickMap() { const el = $("#pickmap"); el.classList.remove("hide"); syncPickMarker(); }
-function syncPickMarker() {
-  const el = $("#pickmap"); if (!F || !el || el.classList.contains("hide")) return; const c = parseCoord($("#f-coord").value);
-  el.innerHTML = c ? `<iframe class="gmap" loading="lazy" src="https://www.google.com/maps?q=${c.lat},${c.lng}&z=16&output=embed"></iframe>` : `<div class="hint" style="padding:14px">좌표를 넣으면 구글맵으로 위치를 보여줘요.</div>`;
-}
+function setCoord(la, lo) { la = +la.toFixed(6); lo = +lo.toFixed(6); $("#f-coord").value = `${la}, ${lo}`; updateCoordMsg() }
 function renderRate() { document.querySelectorAll("#rate button").forEach(b => b.classList.toggle("on", +b.dataset.n <= F.rating)); }
 function updateCoordMsg() {
   const v = $("#f-coord").value.trim(); const c = parseCoord(v); const m = $("#coordmsg");
