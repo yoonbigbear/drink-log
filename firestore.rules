@@ -1,8 +1,8 @@
 rules_version = '2';
-// Firebase 프로젝트(flashcard-1476f) 전체 규칙. flashcard 와 노모로그가 같은 프로젝트를 쓰므로
+// Firebase 프로젝트(flashcard-1476f) 전체 규칙. flashcard 와 飲みログ가 같은 프로젝트를 쓰므로
 // Firebase 콘솔 → Firestore → 규칙에는 이 파일 내용을 통째로 붙여 넣는다.
 //
-// 노모로그 데이터 모델
+// 飲みログ 데이터 모델
 //   members/{uid}              회원. status: pending(승인 대기) | active | rejected
 //   handles/{handle}           아이디 → uid (아이디 중복 방지, 추천인 검색용 · 목록 조회 불가)
 //   private/{uid}/logs/{id}    내 기록 원본 (나만 읽고 씀)
@@ -57,7 +57,7 @@ service cloud.firestore {
       allow write: if isSelf(uid);
     }
 
-    // ───────── 노모로그: 회원 ─────────
+    // ───────── 飲みログ: 회원 ─────────
     match /members/{uid} {
       // 로그인한 사람은 uid 를 알면 한 명씩 읽을 수 있고(추천인 확인용), 목록 조회는 active 멤버만.
       allow get: if signedIn();
@@ -91,7 +91,8 @@ service cloud.firestore {
             && resource.data.get('referrerUid', '') == request.auth.uid
             && resource.data.status == 'pending'
             && request.resource.data.status in ['active', 'rejected']
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedAt']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedAt', 'approvedBy'])
+            && (!request.resource.data.keys().hasAny(['approvedBy']) || request.resource.data.approvedBy == request.auth.uid));
 
       // 신청 취소 / 거절 후 재신청
       allow delete: if isAdmin() || (isSelf(uid) && resource.data.status in ['pending', 'rejected']);
@@ -109,12 +110,12 @@ service cloud.firestore {
             && memberDoc(request.auth.uid).data.status in ['pending', 'rejected']);
     }
 
-    // ───────── 노모로그: 내 기록 (비공개 원본) ─────────
+    // ───────── 飲みログ: 내 기록 (비공개 원본) ─────────
     match /private/{uid}/logs/{id} {
       allow read, write: if isSelf(uid) && isActive();
     }
 
-    // ───────── 노모로그: 사진 (무료 요금제라 Storage 대신 Firestore 에 저장) ─────────
+    // ───────── 飲みログ: 사진 (무료 요금제라 Storage 대신 Firestore 에 저장) ─────────
     match /photos/{id} {
       allow get: if isActive() && (resource.data.ownerUid == request.auth.uid || resource.data.shared == true);
       allow create: if isActive()
@@ -128,7 +129,7 @@ service cloud.firestore {
       allow delete: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
     }
 
-    // ───────── 노모로그: 공유된 게시물 ─────────
+    // ───────── 飲みログ: 공유된 게시물 ─────────
     match /posts/{id} {
       allow read: if isActive();
       allow create: if isActive()
@@ -171,7 +172,7 @@ service cloud.firestore {
       }
     }
 
-    // ───────── 노모로그: 알림 (좋아요·댓글이 달리면 글쓴이에게) ─────────
+    // ───────── 飲みログ: 알림 (좋아요·댓글이 달리면 글쓴이에게) ─────────
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.toUid == request.auth.uid;
       allow create: if isActive()
@@ -191,7 +192,7 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.toUid == request.auth.uid;
     }
 
-    // ───────── 노모로그: 팔로우 ─────────
+    // ───────── 飲みログ: 팔로우 ─────────
     match /follows/{id} {
       allow read: if isActive();
       allow create: if isActive()

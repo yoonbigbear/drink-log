@@ -1,7 +1,7 @@
-// 노모로그 — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122131";
-import { qrCanvas } from "./qr.js?v=11122131";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122131";
+// 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122137";
+import { qrCanvas } from "./qr.js?v=11122137";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, parseCoord, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122137";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -46,7 +46,7 @@ const loginBtn = () => $("#g-login").onclick = async () => {
 const logout = () => A.signOut(auth);
 
 function gateLanding() {
-  showGate(`<div class="glogo">🥃</div><h1>노모로그</h1>
+  showGate(`<div class="glogo">🥃</div><h1>飲みログ</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
@@ -132,7 +132,7 @@ async function gatePending() {
     <button class="btn ghost" id="g-out">로그아웃</button>`);
   $("#g-out").onclick = logout;
   $("#g-copy").onclick = async () => {
-    const t = `노모로그 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.\n${location.href.split("#")[0]}`;
+    const t = `飲みログ 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.\n${location.href.split("#")[0]}`;
     try { await navigator.clipboard.writeText(t); toast("복사했어요. 메신저에 붙여 넣으세요"); } catch (e) { toast("복사하지 못했어요"); }
   };
   $("#g-cancel").onclick = async () => { if (await ask("가입 신청을 취소할까요?", "취소하기")) { try { await cancelApplication(); } catch (e) { toast("실패: " + errText(e)); } } };
@@ -510,7 +510,7 @@ function bindQr(root, id) {
   const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
   if (c) cv.src = c.toDataURL("image/png"); else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
   const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
-  const invite = () => `노모로그에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n추천인 아이디: @${S.member.handle}` : "");
+  const invite = () => `飲みログ에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n추천인 아이디: @${S.member.handle}` : "");
   const png = () => new Promise(r => c.toBlob(r, "image/png"));
   root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
     const k = b.dataset.qr;
@@ -538,8 +538,10 @@ function renderMe() {
     <div class="sec">내가 추천한 멤버 (${act.length})</div>
     ${act.length ? act.map(personRow).join("") : `<div class="hint">아직 없어요. 친구가 가입할 때 내 아이디 <b>@${esc(m.handle)}</b>를 추천인으로 적으면, 여기서 승인할 수 있어요.</div>`}
     <div class="sec">내 추천인</div><div class="hint" id="me-ref">${m.referrerUid ? "불러오는 중…" : "첫 멤버(관리자)예요."}</div>
+    ${S.user.uid === OWNER ? `<div class="sec">관리자</div><button class="btn" id="me-admin" style="width:100%">👑 멤버 관리</button>` : ""}
     <div class="sec">계정</div><button class="btn danger" id="me-out" style="width:100%">로그아웃</button>`;
   bindQr(el, "qr-me");
+  if ($("#me-admin")) $("#me-admin").onclick = () => nav(renderAdmin, { admin: true });
   $("#me-out").onclick = logout;
   $("#me-edit").onclick = () => nav(renderEditProfile);
   $("#me-view").onclick = () => nav(() => renderProfile(me()));
@@ -551,8 +553,37 @@ function renderMe() {
   FS.getCountFromServer(FS.query(col("follows"), FS.where("followeeUid", "==", me()))).then(s => { const n = $("#me-fr"); if (n) n.textContent = s.data().count; }).catch(() => {});
   if (m.referrerUid) loadPeople([m.referrerUid]).then(() => { const n = $("#me-ref"); if (n) n.textContent = `${pname(m.referrerUid)} (@${phandle(m.referrerUid)})`; });
 }
+/* ───────────── 관리자: 멤버 관리 ───────────── */
+const STAT = { active: "멤버", pending: "승인 대기", rejected: "거절됨" };
+const dstr = t => t?.toDate ? t.toDate().toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" }) : "–";
+async function renderAdmin() {
+  sheet.innerHTML = `${bar("멤버 관리")}<div class="sbody"><div class="hint">불러오는 중…</div></div>`; $("#s-back").onclick = back;
+  let rows;
+  try { const sn = await FS.getDocs(col("members")); rows = sn.docs.map(d => ({ uid: d.id, ...d.data() })); }
+  catch (e) { sheet.querySelector(".sbody").innerHTML = `<div class="err">불러오지 못했어요: ${errText(e)}</div>`; return; }
+  rows.forEach(p => people.set(p.uid, p));
+  const by = new Map(rows.map(p => [p.uid, p])); const kids = new Map();
+  rows.forEach(p => { if (p.referrerUid) kids.set(p.referrerUid, (kids.get(p.referrerUid) || 0) + 1); });
+  rows.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+  const hd = u => { const p = by.get(u); return p ? `${esc(p.displayName)} (@${esc(p.handle)})` : "알 수 없음"; };
+  const cnt = k => rows.filter(p => p.status === k).length;
+  sheet.querySelector(".sbody").innerHTML = `<div class="hint">전체 ${rows.length}명 · 멤버 ${cnt("active")} · 승인 대기 ${cnt("pending")} · 거절 ${cnt("rejected")}</div>
+    ${rows.map(p => `<div class="adm" data-u="${esc(p.uid)}"><div class="row" style="align-items:center">${avatar(p.uid)}<div class="pi" style="flex:1;min-width:0"><b>${esc(p.displayName)}</b> <span class="dim sm">@${esc(p.handle)}</span>
+        <span class="badge">${STAT[p.status] || esc(p.status)}</span></div></div>
+      <div class="dim sm">추천인: ${p.referrerUid ? hd(p.referrerUid) : "없음 (관리자)"}${kids.get(p.uid) ? ` · 초대한 사람 ${kids.get(p.uid)}명` : ""}</div>
+      <div class="dim sm">신청 ${dstr(p.createdAt)}${p.approvedAt ? ` · 승인 ${dstr(p.approvedAt)}` : ""}${p.approvedBy ? ` · 승인한 사람 ${hd(p.approvedBy)}` : p.status === "active" && p.referrerUid ? ` · 승인한 사람 기록 없음(추천인으로 추정)` : ""}</div>
+      ${p.uid === OWNER ? "" : `<div class="row" style="margin-top:6px">${p.status === "pending" ? `<button class="btn pri" data-adec="active">승인</button><button class="btn" data-adec="rejected">거절</button>` : ""}<button class="btn danger" data-akick>내보내기</button></div>`}</div>`).join("")}`;
+  sheet.querySelectorAll(".adm").forEach(el => {
+    const u = el.dataset.u;
+    el.querySelectorAll("[data-adec]").forEach(b => b.onclick = async () => { await decide(u, b.dataset.adec); renderAdmin(); });
+    const k = el.querySelector("[data-akick]"); if (k) k.onclick = async () => {
+      const p = by.get(u); if (!await ask(`${p.displayName} (@${p.handle}) 님을 내보낼까요? 멤버 정보와 아이디가 삭제돼요. 올린 글은 남아요.`, "내보내기")) return;
+      try { const b = FS.writeBatch(db); b.delete(ref("members", u)); b.delete(ref("handles", p.handle)); await b.commit(); toast("내보냈어요"); renderAdmin(); } catch (e) { toast("실패: " + errText(e)); } };
+  });
+}
+
 async function decide(uid, status) {
-  try { const d = { status }; if (status === "active") d.approvedAt = FS.serverTimestamp(); await FS.updateDoc(ref("members", uid), d); toast(status === "active" ? "승인했어요. 이제 멤버예요 🎉" : "거절했어요"); }
+  try { const d = { status }; if (status === "active") { d.approvedAt = FS.serverTimestamp(); d.approvedBy = me(); } await FS.updateDoc(ref("members", uid), d); toast(status === "active" ? "승인했어요. 이제 멤버예요 🎉" : "거절했어요"); }
   catch (e) { toast("실패: " + errText(e)); }
 }
 function renderEditProfile() {
