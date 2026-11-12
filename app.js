@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11122208";
-import { qrCanvas } from "./qr.js?v=11122208";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122208";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11122223";
+import { qrCanvas } from "./qr.js?v=11122223";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11122223";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -208,7 +208,7 @@ function renderBadge() {
   const p = pendingList().length, u = unreadN(), n = p + u;
   $("#bell").classList.remove("hide"); $("#bellN").textContent = n ? String(n) : ""; $("#bell").classList.toggle("has", !!n); $("#meDot").classList.toggle("hide", !p);
 }
-const NOTE_TXT = { like: "님이 내 글에 좋아요를 눌렀어요", comment: "님이 내 글에 댓글을 남겼어요" };
+const NOTE_TXT = { like: "님이 내 글에 좋아요를 눌렀어요", comment: "님이 내 글에 댓글을 남겼어요", mention: "님이 글의 메모에서 나를 언급했어요" };
 function startNotifs(uid) {
   return FS.onSnapshot(FS.query(col("notifications"), FS.where("toUid", "==", uid), FS.limit(50)), async snap => {
     S.notifs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now()));
@@ -389,6 +389,7 @@ function renderDetail(it, kind) {
     ${kind === "mine" ? `<div class="actions"><button class="btn" id="d-again">여기서 한 잔 더</button><button class="btn danger" id="d-del">삭제</button></div>` : ""}
   </div>`;
   $("#s-back").onclick = back;
+  linkMentions(sheet);
   sheet.querySelectorAll(".gallery img[data-pid]").forEach(async img => { try { const d = await fullPhoto(img.dataset.pid); if (d && img.isConnected) img.src = d; } catch (e) {} });
   { const el = $("#d-map"); const q = it.lat != null ? `${it.lat},${it.lng}` : `${it.place || ""} ${it.address || ""}`.trim(); if (el && q) el.innerHTML = `<iframe class="gmap" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${encodeURIComponent(q)}&z=16&output=embed"></iframe>`; }
   const prof = sheet.querySelector("[data-prof]"); if (prof) prof.onclick = () => nav(() => renderProfile(owner));
@@ -402,6 +403,41 @@ function renderDetail(it, kind) {
     $("#d-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) deleteLog(it); };
   }
   if (social) initSocial(it.id, owner, it.name);
+}
+
+/* ───────────── 메모의 @아이디 멘션 ───────────── */
+const MRE = /@([a-z0-9_]{3,20})/g;
+const mentionsOf = t => [...new Set([...(t || "").toLowerCase().matchAll(MRE)].map(m => m[1]))];
+const handleUid = new Map();
+async function resolveHandle(h) {
+  if (handleUid.has(h)) return handleUid.get(h);
+  let u = null; try { const s = await FS.getDoc(ref("handles", h)); if (s.exists()) u = s.data().uid; } catch (e) {}
+  handleUid.set(h, u); return u;
+}
+// 상세 화면의 메모에서 실제 멤버 아이디만 눌러서 프로필로 갈 수 있게 한다.
+async function linkMentions(root) {
+  const ps = [...root.querySelectorAll(".note p")]; const hs = [...new Set(ps.flatMap(p => mentionsOf(p.textContent)))]; if (!hs.length) return;
+  await Promise.all(hs.map(resolveHandle));
+  ps.forEach(p => { if (!p.isConnected) return; p.innerHTML = p.innerHTML.replace(MRE, (m, h) => handleUid.get(h.toLowerCase()) ? `<a href="#" class="mention" data-mu="${esc(handleUid.get(h.toLowerCase()))}">${m}</a>` : `<span class="mention off">${m}</span>`); });
+  root.querySelectorAll("a.mention").forEach(a => a.onclick = e => { e.preventDefault(); nav(() => renderProfile(a.dataset.mu)); });
+}
+// 메모를 쓰다가 @를 입력하면 멤버 아이디를 찾아 보여준다.
+function bindMentionSuggest() {
+  const ta = $("#f-note"); if (!ta) return; let box = document.createElement("div"); box.className = "chips"; box.id = "f-ment"; box.style.margin = "6px 0"; ta.after(box);
+  let t, seq = 0;
+  const hide = () => { box.innerHTML = ""; };
+  ta.addEventListener("input", () => {
+    clearTimeout(t); const before = ta.value.slice(0, ta.selectionStart); const m = before.match(/@([a-z0-9_]{1,20})$/i); if (!m) return hide();
+    const q = m[1].toLowerCase(); const my = ++seq;
+    t = setTimeout(async () => {
+      try { const sn = await FS.getDocs(FS.query(col("members"), FS.where("handle", ">=", q), FS.where("handle", "<=", q + "\uf8ff"), FS.limit(6)));
+        if (my !== seq) return; const rows = sn.docs.map(d => d.data()).filter(p => p.status === "active");
+        box.innerHTML = rows.length ? rows.map(p => `<button type="button" class="chip" data-h="${esc(p.handle)}">@${esc(p.handle)} <span class="dim">${esc(p.displayName)}</span></button>`).join("") : "";
+      } catch (e) { hide(); }
+    }, 250);
+  });
+  box.onclick = e => { const c = e.target.closest("[data-h]"); if (!c) return; const pos = ta.selectionStart; const before = ta.value.slice(0, pos).replace(/@[a-z0-9_]*$/i, "@" + c.dataset.h + " ");
+    ta.value = before + ta.value.slice(pos); ta.focus(); ta.selectionStart = ta.selectionEnd = before.length; hide(); };
 }
 
 /* ───────────── 좋아요 · 댓글 ───────────── */
@@ -602,7 +638,7 @@ function openForm(it, pre) {
   const d = Object.assign({}, pre || {}, it || {}); const o = d.shareOpts || {};
   F = { id: it?.id || null, createdAt: it?.createdAt || null, wasShared: !!it?.shared,
     photos: (it?.photos || []).map(p => ({ ...p })), removed: [], origFirstId: it?.photos?.[0]?.id || null, origThumb: it?.thumb || "", tags: new Set(it?.tags || []), rating: it?.rating || 0,
-    whenTouched: !!it, loc: { lat: d.lat ?? null, lng: d.lng ?? null, mapLink: d.mapLink || "", place: d.place || "", address: d.address || "" }, cat: d.category || S.mine[0]?.category || "위스키", 
+    whenTouched: !!it, prevNote: it?.note || "", prevNoteShared: it?.shareOpts?.note ?? true, loc: { lat: d.lat ?? null, lng: d.lng ?? null, mapLink: d.mapLink || "", place: d.place || "", address: d.address || "" }, cat: d.category || S.mine[0]?.category || "위스키", 
     share: !!it?.shared, sPrice: o.price ?? false, sPlace: o.place || "name", sNote: o.note ?? true, reco: !!d.recommend };
   const recent = placeIndex().slice(0, 10);
   nav(() => {}, {});  // 스택에 자리만 잡고 아래에서 내용을 그린다
@@ -667,6 +703,7 @@ function openForm(it, pre) {
     document.querySelectorAll("#f-share button").forEach(x => x.classList.toggle("on", x === b)); $("#sharebox").classList.toggle("hide", !F.share); $("#f-sharehint").textContent = F.share ? "공유하면 승인된 모든 멤버의 피드에 올라가요." : "나만 볼 수 있어요. 피드에 올라가지 않아요."; };
   if ($("#recent")) $("#recent").onclick = e => { const c = e.target.closest("[data-i]"); if (!c) return; const b = recent[+c.dataset.i];
     $("#f-place").value = b.place; $("#f-address").value = b.address || ""; };
+  bindMentionSuggest();
   $("#f-gmap").onclick = () => { const q = ($("#f-place").value.trim() + " " + $("#f-address").value.trim()).trim(); if (!q) return toast("장소 이름이나 주소를 먼저 적어 주세요");
     window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q), "_blank", "noopener"); };
   if ($("#f-del")) $("#f-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) { const x = it; F = null; await deleteLog(x); } };
@@ -760,6 +797,10 @@ async function save() {
       createdAt: F.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (F.wasShared && !F.share) await cleanupSubs(id);
     const b = FS.writeBatch(db); b.set(ref("private", uid, "logs", id), log);
+    if (F.share && $("#f-snote").checked) {   // 메모에서 새로 언급된 멤버에게 알림
+      const prev = new Set(F.wasShared && F.prevNoteShared ? mentionsOf(F.prevNote) : []);
+      for (const h of mentionsOf(v("#f-note")).filter(x => !prev.has(x))) { const mu = await resolveHandle(h); const nt = notify(mu, "mention", `m_${id}_${mu}`, { postId: id, postName: name }); if (nt) b.set(nt.ref, nt.data); }
+    }
     for (const p of F.photos) {   // 사진 본문은 따로 저장하고, 공유 여부를 따라간다
       if (p.data) { b.set(ref("photos", p.id), { ownerUid: uid, logId: id, shared: F.share, data: p.data, createdAt: FS.serverTimestamp() }); fullCache.set(p.id, p.data); }
       else if (F.share !== F.wasShared) b.update(ref("photos", p.id), { shared: F.share });

@@ -179,7 +179,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['toUid', 'fromUid', 'type', 'postId', 'postName', 'text', 'read', 'createdAt'])
         && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.toUid != request.auth.uid
-        && request.resource.data.type in ['like', 'comment']
+        && request.resource.data.type in ['like', 'comment', 'mention']
         && request.resource.data.read == false;
       allow update: if isActive() && (
         (resource.data.toUid == request.auth.uid

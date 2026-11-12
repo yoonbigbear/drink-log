@@ -184,3 +184,4 @@ nav .tab{position:relative}
 .person.unread{border-color:var(--amber);background:#2a1f14}
 #bell:not(.has){border-color:var(--line);color:var(--muted)}
 .adm{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:flex;flex-direction:column;gap:3px}
+.mention{color:var(--amber2);text-decoration:none;font-weight:600}.mention.off{color:var(--muted)}
