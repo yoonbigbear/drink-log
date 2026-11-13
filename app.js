@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11131300";
-import { qrCanvas } from "./qr.js?v=11131300";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131300";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11131532";
+import { qrCanvas } from "./qr.js?v=11131532";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131532";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -347,7 +347,7 @@ async function loadFeed() {
 function postCard(p) {
   const c = CAT[p.category] || CAT["기타"];
   return `<article class="post" data-id="${esc(p.id)}">
-    <div class="phead">${avatar(p.ownerUid)}<div style="min-width:0"><b>${esc(pname(p.ownerUid))}</b> <span class="dim sm">@${esc(phandle(p.ownerUid))}</span>
+    <div class="phead" data-prof="${esc(p.ownerUid)}" style="cursor:pointer">${avatar(p.ownerUid)}<div style="min-width:0"><b>${esc(pname(p.ownerUid))}</b> <span class="dim sm">@${esc(phandle(p.ownerUid))}</span>
       <div class="dim sm">${esc(ago(p.when))}${p.place ? " · 📍 " + esc(p.place) : ""}</div></div></div>
     ${p.thumb ? `<img class="pimg" ${p.photos?.[0]?.id ? `data-pid="${esc(p.photos[0].id)}"` : ""} src="${esc(p.thumb)}" alt="">` : ""}
     <div class="pbody"><div class="cname" style="white-space:normal">${c.icon} ${esc(p.name)}${p.recommend ? '<span class="reco">👍 추천</span>' : ""}</div>
@@ -380,7 +380,7 @@ function upgradePhotos(root) {
   photoIO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { photoIO.unobserve(e.target); load(e.target); } }), { rootMargin: "300px" });
   imgs.forEach(i => photoIO.observe(i));
 }
-$("#feedlist").addEventListener("click", e => { const c = e.target.closest(".post"); if (c) openPost(c.dataset.id); });
+$("#feedlist").addEventListener("click", e => { const h = e.target.closest("[data-prof]"); if (h) return nav(() => renderProfile(h.dataset.prof)); const c = e.target.closest(".post"); if (c) openPost(c.dataset.id); });
 $("#feedbar").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (b) { S.reco = b.dataset.f === "reco"; S.follow = b.dataset.f === "follow"; renderFeed(); } });
 $("#findpeople").onclick = () => nav(renderPeople);
 $("#qrchip").onclick = () => nav(renderQr);
@@ -532,6 +532,7 @@ function bindMentionSuggest() {
 }
 
 /* ───────────── 좋아요 · 댓글 ───────────── */
+sheet.addEventListener("click", e => { const x = e.target.closest("[data-cprof]"); if (x && x.dataset.cprof !== me()) nav(() => renderProfile(x.dataset.cprof)); });
 async function initSocial(id, ownerUid, name) {
   D = { id, ownerUid, name, liked: false, likeCount: 0, commentCount: 0, comments: [] };
   try {
@@ -547,7 +548,7 @@ function syncCounts() { const p = S.feed.find(x => x.id === D.id); if (p) { p.li
 function renderSocial() {
   const box = $("#social"); if (!box || !D) return;
   box.innerHTML = `<div class="likerow"><button class="likebtn ${D.liked ? "on" : ""}" id="s-like">${D.liked ? "♥" : "♡"} ${D.likeCount}</button><span class="dim">💬 ${D.commentCount}</span></div>
-    ${D.comments.map(c => `<div class="comment">${avatar(c.authorUid)}<div class="ct"><div class="cn"><b>${esc(pname(c.authorUid))}</b> · ${esc(c.createdAt?.toDate ? ago(c.createdAt.toDate()) : "방금")}</div><p>${esc(c.text)}</p></div>${c.authorUid === me() || D.ownerUid === me() ? `<button class="del" data-cdel="${esc(c.id)}">삭제</button>` : ""}</div>`).join("")}
+    ${D.comments.map(c => `<div class="comment"><span data-cprof="${esc(c.authorUid)}" style="cursor:pointer">${avatar(c.authorUid)}</span><div class="ct"><div class="cn"><b data-cprof="${esc(c.authorUid)}" style="cursor:pointer;text-decoration:underline dotted">${esc(pname(c.authorUid))}</b> · ${esc(c.createdAt?.toDate ? ago(c.createdAt.toDate()) : "방금")}</div><p>${esc(c.text)}</p></div>${c.authorUid === me() || D.ownerUid === me() ? `<button class="del" data-cdel="${esc(c.id)}">삭제</button>` : ""}</div>`).join("")}
     <div class="cinput"><input class="inp" id="s-text" maxlength="500" placeholder="댓글 달기…"><button class="btn pri" id="s-send">등록</button></div>`;
   $("#s-like").onclick = async () => {
     const was = D.liked; const b = FS.writeBatch(db); const lr = ref("posts", D.id, "likes", me()), pr = ref("posts", D.id);
