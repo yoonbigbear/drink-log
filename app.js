@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11130107";
-import { qrCanvas } from "./qr.js?v=11130107";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11130107";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11131300";
+import { qrCanvas } from "./qr.js?v=11131300";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131300";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -61,6 +61,7 @@ function gateLanding() {
   showGate(`<div class="glogo">🥃</div><h1>飲みログ</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
+    <button class="btn big" id="g-guest" style="margin-top:10px">👀 게스트로 둘러보기</button>
     <div class="or">또는 이메일로</div>
     <input class="inp" id="e-mail" type="email" autocomplete="email" placeholder="이메일">
     <input class="inp" id="e-pass" type="password" autocomplete="current-password" placeholder="비밀번호 (6자 이상)" style="margin-top:8px">
@@ -68,7 +69,24 @@ function gateLanding() {
     <button class="linkbtn" id="e-reset" type="button">비밀번호를 잊으셨나요?</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
     <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}`);
-  loginBtn(); emailAuth(); bindQr($("#gate"), "qr-gate");
+  loginBtn(); emailAuth(); bindQr($("#gate"), "qr-gate"); $("#g-guest").onclick = gateGuest;
+}
+// 게스트: 로그인 없이 최근 공유 글 몇 개만 맛보기로 보여주고, 나머지는 가입으로 유도한다.
+async function gateGuest() {
+  showGate(`<div class="glogo">🥃</div><h1>飲みログ</h1><p class="gsub" style="text-align:center">게스트로 둘러보는 중이에요</p><div id="gg"><div class="hint">불러오는 중…</div></div>
+    <div class="lockbox">🔒 작성자, 메모, 장소, 가격, 댓글, 쪽지, 지도는<br>가입한 멤버만 볼 수 있어요.</div>
+    <button class="btn pri big" id="gg-join">가입·로그인하고 전체 보기</button>`);
+  $("#gg-join").onclick = gateLanding;
+  try {
+    const sn = await FS.getDocs(FS.query(col("posts"), FS.orderBy("when", "desc"), FS.limit(5))); const rows = sn.docs.map(d => ({ id: d.id, ...d.data() }));
+    $("#gg").innerHTML = rows.length ? rows.map(p => { const c = CAT[p.category] || CAT["기타"];
+      return `<article class="post guestcard" data-id="${esc(p.id)}">${p.thumb ? `<img class="pimg" src="${esc(p.thumb)}" alt="">` : ""}
+        <div class="pbody"><div class="cname" style="white-space:normal">${c.icon} ${esc(p.name)}${p.recommend ? '<span class="reco">👍 추천</span>' : ""}</div>
+        <div class="cmeta" style="white-space:normal">${esc([p.subtype || p.category, p.producer].filter(Boolean).join(" · "))}</div>
+        <div class="crow">${stars(p.rating) || "<span></span>"}<span class="dim sm">${esc(ago(p.when))}</span></div></div></article>`; }).join("")
+      : `<div class="empty"><div class="big">🥃</div>아직 공유된 글이 없어요.</div>`;
+    $("#gg").onclick = async e => { if (e.target.closest(".guestcard") && await ask("자세한 내용은 가입한 멤버만 볼 수 있어요. 가입하러 갈까요?", "가입하기")) gateLanding(); };
+  } catch (e) { $("#gg").innerHTML = `<div class="err">불러오지 못했어요: ${errText(e)}</div>`; }
 }
 function gateError(e) {
   showGate(`<div class="glogo">⚠️</div><h2 style="text-align:center">연결에 실패했어요</h2><p class="gsub" style="text-align:center">${errText(e)}</p><button class="btn big" id="g-retry">다시 시도</button><button class="btn ghost" id="g-out">로그아웃</button>`);

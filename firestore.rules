@@ -132,6 +132,8 @@ service cloud.firestore {
     // ───────── 飲みログ: 공유된 게시물 ─────────
     match /posts/{id} {
       allow read: if isActive();
+      // 게스트(로그아웃 상태): 최근 글 5개까지만 목록으로 볼 수 있다 (사진 원본·댓글·멤버 정보는 불가)
+      allow list: if request.auth == null && request.query.limit <= 5;
       allow create: if isActive()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.likeCount == 0
