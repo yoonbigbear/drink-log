@@ -16,7 +16,7 @@ export function ago(w) {
   if (s < 0) return fmtDay(w); if (s < 3600) return Math.max(1, Math.round(s / 60)) + "분 전";
   if (s < 86400) return Math.round(s / 3600) + "시간 전"; if (s < 86400 * 7) return Math.round(s / 86400) + "일 전"; return fmtDay(w);
 }
-export function stars(r) { r = Math.round(r || 0); return r ? `<span class="stars">${"★".repeat(r)}<span class="off">${"★".repeat(5 - r)}</span></span>` : ""; }
+export function stars(r) { r = Math.round((+r || 0) * 2) / 2; return r ? `<span class="stars" title="${r}점"><span class="off">★★★★★</span><span class="fill" style="width:${r * 20}%">★★★★★</span></span><span class="starn">${r}</span>` : ""; }
 
 let toastT;
 export function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }

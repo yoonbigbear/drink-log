@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11131952";
-import { qrCanvas } from "./qr.js?v=11131952";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131952";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11140039";
+import { qrCanvas } from "./qr.js?v=11140039";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11140039";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -828,7 +828,7 @@ function openForm(it, pre) {
       <label>향 (노즈)</label><textarea class="inp" id="f-nose">${esc(d.nose)}</textarea><label>맛 (팔레트)</label><textarea class="inp" id="f-palate">${esc(d.palate)}</textarea><label>여운 (피니시)</label><textarea class="inp" id="f-finish">${esc(d.finish)}</textarea>
     </fieldset>
     <fieldset><legend>경험</legend>
-      <label>평점</label><div class="ratepick" id="rate">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}">★</button>`).join("")}</div>
+      <label>평점</label><div class="ratepick" id="rate">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}">★</button>`).join("")}</div><div class="hint" id="rate-n"></div>
       <label>메모 (누구와, 분위기, 페어링 등)</label><textarea class="inp" id="f-note" style="min-height:96px">${esc(d.note)}</textarea>
     </fieldset>
     <fieldset><legend>공유</legend>
@@ -852,7 +852,7 @@ function openForm(it, pre) {
   $("#f-cancel").onclick = cancelForm; $("#f-save").onclick = save; $("#form").onsubmit = e => { e.preventDefault(); save(); };
   $("#f-when").oninput = () => { F.whenTouched = true; };
   $("#f-cats").onclick = e => { const b = e.target.closest("[data-k]"); if (!b) return; F.cat = b.dataset.k; document.querySelectorAll("#f-cats .chip").forEach(x => x.classList.toggle("on", x === b)); applyCat(); };
-  $("#rate").onclick = e => { const b = e.target.closest("[data-n]"); if (!b) return; const n = +b.dataset.n; F.rating = F.rating === n ? 0 : n; renderRate(); };
+  $("#rate").onclick = e => { const b = e.target.closest("[data-n]"); if (!b) return; const r = b.getBoundingClientRect(); const n = +b.dataset.n - (e.clientX - r.left < r.width / 2 ? 0.5 : 0); F.rating = F.rating === n ? 0 : n; renderRate(); };
   $("#aromas").onclick = e => { const b = e.target.closest("[data-t]"); if (!b) return; const t = b.dataset.t; F.tags.has(t) ? F.tags.delete(t) : F.tags.add(t); b.classList.toggle("on"); };
   const addTag = () => { const v = $("#f-newtag").value.trim(); if (!v) return; $("#f-newtag").value = ""; F.tags.add(v); renderAromas(); };
   $("#f-addtag").onclick = addTag; $("#f-newtag").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } };
@@ -871,7 +871,7 @@ function applyCat() {
 }
 function renderAromas() { const c = CAT[F.cat] || CAT["기타"]; const list = [...new Set([...(c.aromas || []), ...F.tags])];
   $("#aromas").innerHTML = list.map(a => `<button type="button" class="chip ${F.tags.has(a) ? "on" : ""}" data-t="${esc(a)}">${esc(a)}</button>`).join(""); }
-function renderRate() { document.querySelectorAll("#rate button").forEach(b => b.classList.toggle("on", +b.dataset.n <= F.rating)); }
+function renderRate() { document.querySelectorAll("#rate button").forEach(b => { const n = +b.dataset.n; b.classList.toggle("on", n <= F.rating); b.classList.toggle("half", n - 0.5 === F.rating); }); const t = $("#rate-n"); if (t) t.textContent = F.rating ? F.rating + "점" : "별의 왼쪽 반을 누르면 0.5점"; }
 
 /* ── 사진 (Firestore photos/{id} 에 data URL 로 저장: 무료 요금제에서는 Storage 를 쓸 수 없다) ── */
 const fullCache = new Map();
