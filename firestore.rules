@@ -99,7 +99,7 @@ service cloud.firestore {
     }
 
     match /handles/{handle} {
-      allow get: if signedIn();
+      allow get: if true;
       allow create: if signedIn()
         && handle.matches('^[a-z0-9_]{3,20}$')
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
@@ -108,6 +108,17 @@ service cloud.firestore {
       allow delete: if isAdmin()
         || (signedIn() && resource.data.uid == request.auth.uid
             && memberDoc(request.auth.uid).data.status in ['pending', 'rejected']);
+    }
+
+    // 아이디 로그인: 복구용 이메일을 등록한 계정의 아이디 → 이메일 연결 (로그인 전에 읽어야 해서 공개)
+    match /logins/{handle} {
+      allow get: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'email'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && getAfter(/databases/$(database)/documents/handles/$(handle)).data.uid == request.auth.uid;
+      allow delete: if isAdmin() || (signedIn() && (resource == null || resource.data.uid == request.auth.uid));
     }
 
     // ───────── 飲みログ: 내 기록 (비공개 원본) ─────────

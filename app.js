@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11131532";
-import { qrCanvas } from "./qr.js?v=11131532";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131532";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11131952";
+import { qrCanvas } from "./qr.js?v=11131952";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11131952";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -44,16 +44,78 @@ const loginBtn = () => $("#g-login").onclick = async () => {
   catch (e) { if (!/popup-closed|cancelled/.test(e.code || "")) toast("로그인 실패: " + (e.code || e.message)); }
 };
 const AUTH_ERR = { "auth/invalid-email": "이메일 형식이 올바르지 않아요", "auth/missing-password": "비밀번호를 입력해 주세요", "auth/weak-password": "비밀번호는 6자 이상이어야 해요",
-  "auth/email-already-in-use": "이미 가입된 이메일이에요. 로그인해 보세요", "auth/invalid-credential": "이메일 또는 비밀번호가 맞지 않아요", "auth/wrong-password": "이메일 또는 비밀번호가 맞지 않아요",
-  "auth/user-not-found": "이메일 또는 비밀번호가 맞지 않아요", "auth/too-many-requests": "시도가 너무 많아요. 잠시 후 다시 해 주세요", "auth/operation-not-allowed": "이메일 로그인이 아직 켜져 있지 않아요 (관리자: Firebase 콘솔에서 이메일/비밀번호를 켜 주세요)",
+  "auth/email-already-in-use": "이미 가입된 이메일이에요. 로그인해 보세요", "auth/invalid-credential": "아이디 또는 비밀번호가 맞지 않아요", "auth/wrong-password": "아이디 또는 비밀번호가 맞지 않아요",
+  "auth/user-not-found": "아이디 또는 비밀번호가 맞지 않아요", "auth/too-many-requests": "시도가 너무 많아요. 잠시 후 다시 해 주세요", "auth/operation-not-allowed": "아이디 로그인이 아직 켜져 있지 않아요 (관리자: Firebase 콘솔에서 이메일/비밀번호를 켜 주세요)",
   "auth/network-request-failed": "네트워크 연결을 확인해 주세요" };
-function emailAuth() {
-  const em = () => $("#e-mail").value.trim(), pw = () => $("#e-pass").value;
-  const run = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); } catch (e) { toast(AUTH_ERR[e.code] || ("실패: " + (e.code || e.message))); } };
-  $("#e-login").onclick = () => run(() => A.signInWithEmailAndPassword(auth, em(), pw()));
-  $("#e-signup").onclick = () => run(() => A.createUserWithEmailAndPassword(auth, em(), pw()));
-  $("#e-reset").onclick = () => { if (!em()) return toast("위에 이메일을 먼저 적어 주세요"); run(() => A.sendPasswordResetEmail(auth, em()), "비밀번호 재설정 메일을 보냈어요. 스팸함도 확인해 보세요"); };
-  [$("#e-mail"), $("#e-pass")].forEach(i => i.onkeydown = e => { if (e.key === "Enter") $("#e-login").click(); });
+// 아이디 로그인: Firebase 는 이메일만 받으므로 아이디를 보이지 않는 가짜 주소로 바꿔 쓴다.
+// 복구용 이메일을 적은 사람은 그 이메일이 계정 주소가 되고, logins/{아이디} 에 연결해 둔다.
+const FAKE = "@id.nomilog.example.com", IDRE = /^[a-z0-9_]{3,20}$/;
+const fakeMail = id => id + FAKE;
+const isPwUser = u => !!u?.providerData?.some(p => p.providerId === "password");
+const needsLoginDoc = u => isPwUser(u) && !!u.email && !u.email.endsWith(FAKE);
+const authMsg = e => AUTH_ERR[e.code] || ("실패: " + (e.code || e.message));
+let pendingId = "";
+async function loginEmailOf(id) {
+  if (id.includes("@")) return id;
+  try { const d = await FS.getDoc(ref("logins", id)); if (d.exists() && d.data().email) return d.data().email; } catch (e) {}
+  return fakeMail(id);
+}
+const maskMail = m => m.replace(/^(.{1,2}).*(@.*)$/, "$1***$2");
+function idAuth() {
+  const id = () => $("#e-id").value.trim().toLowerCase().replace(/^@/, ""), pw = () => $("#e-pass").value;
+  $("#e-login").onclick = async () => {
+    if (!id()) return toast("아이디를 입력해 주세요"); if (!pw()) return toast("비밀번호를 입력해 주세요");
+    try { await A.signInWithEmailAndPassword(auth, await loginEmailOf(id()), pw()); } catch (e) { toast(authMsg(e)); }
+  };
+  $("#e-signup").onclick = () => gateJoin(id());
+  $("#e-reset").onclick = async () => {
+    if (!id()) return toast("위에 아이디를 먼저 적어 주세요");
+    const em = await loginEmailOf(id());
+    if (em.endsWith(FAKE)) return toast("복구용 이메일이 등록되지 않은 아이디예요. 관리자에게 문의해 주세요");
+    try { await A.sendPasswordResetEmail(auth, em); toast(`${maskMail(em)} 로 재설정 메일을 보냈어요. 스팸함도 확인해 보세요`); } catch (e) { toast(authMsg(e)); }
+  };
+  [$("#e-id"), $("#e-pass")].forEach(i => i.onkeydown = e => { if (e.key === "Enter") $("#e-login").click(); });
+}
+// 아이디·비밀번호로 새 계정 만들기 (이후 닉네임·추천인을 적는 가입 신청으로 이어진다)
+function gateJoin(id0 = "") {
+  showGate(`<h2>아이디로 가입</h2><p class="gsub">아이디와 비밀번호를 정해 주세요.<br>다음 단계에서 닉네임과 추천인을 적어요.</p>
+    <label>아이디 (영문 소문자·숫자·_ , 3~20자)</label>
+    <input class="inp" id="j-id" autocapitalize="off" autocomplete="username" maxlength="20" value="${esc(IDRE.test(id0) ? id0 : "")}" placeholder="예: malt_lover">
+    <div id="j-msg" class="hint"></div>
+    <label>비밀번호 (6자 이상)</label><input class="inp" id="j-pw" type="password" autocomplete="new-password">
+    <label>비밀번호 확인</label><input class="inp" id="j-pw2" type="password" autocomplete="new-password">
+    <label>복구용 이메일 (선택)</label><input class="inp" id="j-mail" type="email" autocomplete="email" placeholder="비밀번호를 잊었을 때 재설정 메일을 받을 주소">
+    <div class="hint">적지 않으면 비밀번호를 잊었을 때 되찾을 방법이 없어요.</div>
+    <button class="btn pri big" id="j-go">다음</button><button class="btn ghost" id="j-back">돌아가기</button>`);
+  $("#j-back").onclick = gateLanding; let t;
+  const check = async h => { try { return (await FS.getDoc(ref("handles", h))).exists(); } catch (e) { return false; } };
+  $("#j-id").oninput = e => { const h = e.target.value.trim().toLowerCase(), m = $("#j-msg"); clearTimeout(t);
+    if (!h) { m.className = "hint"; m.textContent = ""; return; }
+    if (!IDRE.test(h)) { m.className = "err"; m.textContent = "영문 소문자·숫자·_ 3~20자로 적어 주세요"; return; }
+    m.className = "hint"; m.textContent = "확인 중…";
+    t = setTimeout(async () => { const taken = await check(h); if ($("#j-id")?.value.trim().toLowerCase() !== h) return;
+      m.className = taken ? "err" : "ok"; m.textContent = taken ? "이미 쓰고 있는 아이디예요" : "✓ 사용할 수 있어요"; }, 350); };
+  $("#j-go").onclick = async () => {
+    const h = $("#j-id").value.trim().toLowerCase(), p = $("#j-pw").value, mail = $("#j-mail").value.trim();
+    if (!IDRE.test(h)) return toast("아이디를 형식에 맞게 적어 주세요");
+    if (p.length < 6) return toast("비밀번호는 6자 이상이어야 해요");
+    if (p !== $("#j-pw2").value) return toast("비밀번호 확인이 일치하지 않아요");
+    if (mail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast("복구용 이메일 형식이 올바르지 않아요");
+    const btn = $("#j-go"); btn.disabled = true;
+    try {
+      if (await check(h)) { btn.disabled = false; return toast("이미 쓰고 있는 아이디예요"); }
+      pendingId = h; try { sessionStorage.setItem("nomi_pending_id", h); } catch (e) {}
+      await A.createUserWithEmailAndPassword(auth, mail || fakeMail(h), p);   // 성공하면 가입 신청 화면으로 넘어간다
+    } catch (e) { btn.disabled = false;
+      toast(e.code === "auth/email-already-in-use" ? (mail ? "이미 다른 계정에 쓰인 이메일이에요" : "이미 쓰고 있는 아이디예요") : authMsg(e)); }
+  };
+}
+// 로그인한 계정에 묶인 아이디 (가짜 주소 계정은 주소에서, 복구 이메일 계정은 방금 적은 값에서)
+function boundId(u) {
+  if (!isPwUser(u)) return "";
+  if (u.email?.endsWith(FAKE)) return u.email.slice(0, -FAKE.length);
+  let p = pendingId; try { p = p || sessionStorage.getItem("nomi_pending_id") || ""; } catch (e) {}
+  return IDRE.test(p) ? p : "";
 }
 const logout = () => A.signOut(auth);
 
@@ -62,14 +124,14 @@ function gateLanding() {
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
     <button class="btn pri big" id="g-login">Google로 시작하기</button>
     <button class="btn big" id="g-guest" style="margin-top:10px">👀 게스트로 둘러보기</button>
-    <div class="or">또는 이메일로</div>
-    <input class="inp" id="e-mail" type="email" autocomplete="email" placeholder="이메일">
-    <input class="inp" id="e-pass" type="password" autocomplete="current-password" placeholder="비밀번호 (6자 이상)" style="margin-top:8px">
-    <div class="row" style="margin-top:8px"><button class="btn pri" id="e-login">이메일로 로그인</button><button class="btn" id="e-signup">이메일로 가입</button></div>
+    <div class="or">또는 아이디로</div>
+    <input class="inp" id="e-id" autocapitalize="off" autocomplete="username" placeholder="아이디">
+    <input class="inp" id="e-pass" type="password" autocomplete="current-password" placeholder="비밀번호" style="margin-top:8px">
+    <div class="row" style="margin-top:8px"><button class="btn pri" id="e-login">로그인</button><button class="btn" id="e-signup">아이디로 가입</button></div>
     <button class="linkbtn" id="e-reset" type="button">비밀번호를 잊으셨나요?</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
     <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}`);
-  loginBtn(); emailAuth(); bindQr($("#gate"), "qr-gate"); $("#g-guest").onclick = gateGuest;
+  loginBtn(); idAuth(); bindQr($("#gate"), "qr-gate"); $("#g-guest").onclick = gateGuest;
 }
 // 게스트: 로그인 없이 최근 공유 글 몇 개만 맛보기로 보여주고, 나머지는 가입으로 유도한다.
 async function gateGuest() {
@@ -96,7 +158,7 @@ function gateError(e) {
 function gateSignup() {
   const isAdmin = S.user.uid === OWNER;
   showGate(`<h2>가입 신청</h2>
-    <p class="gsub">${esc(S.user.displayName || S.user.email || "")} 님, 처음 오셨네요.${isAdmin ? " 첫 멤버(관리자)로 시작해요." : "<br>추천인이 승인하면 가입이 완료돼요."}</p>
+    <p class="gsub">${esc(S.user.displayName || (S.user.email?.endsWith(FAKE) ? boundId(S.user) : S.user.email) || "")} 님, 처음 오셨네요.${isAdmin ? " 첫 멤버(관리자)로 시작해요." : "<br>추천인이 승인하면 가입이 완료돼요."}</p>
     <label>아이디 (영문 소문자·숫자·_ , 3~20자)</label>
     <input class="inp" id="g-handle" autocapitalize="off" autocomplete="off" maxlength="20" placeholder="예: malt_lover">
     <div id="g-hmsg" class="hint"></div>
@@ -107,6 +169,8 @@ function gateSignup() {
     <button class="btn pri big" id="g-submit">${isAdmin ? "시작하기" : "가입 신청"}</button>
     <button class="btn ghost" id="g-out">다른 계정으로</button>`);
   $("#g-out").onclick = logout;
+  const bid = boundId(S.user);
+  if (bid) { const hi = $("#g-handle"); hi.value = bid; hi.readOnly = true; $("#g-hmsg").textContent = "로그인 아이디와 같아요"; if (!$("#g-name").value) $("#g-name").value = bid; }
   let refUid = null, hOk = false, hT;
   const HRE = /^[a-z0-9_]{3,20}$/;
   $("#g-handle").oninput = e => {
@@ -147,7 +211,8 @@ function gateSignup() {
       const m = { handle, displayName: name, status: isAdmin ? "active" : "pending", createdAt: FS.serverTimestamp() };
       if (!isAdmin) m.referrerUid = refUid;
       b.set(ref("members", uid), m);
-      await b.commit();      // 이후 members 스냅샷이 화면을 바꿔 준다
+      if (needsLoginDoc(S.user)) b.set(ref("logins", handle), { uid, email: S.user.email });   // 아이디 → 복구 이메일 계정 연결
+      await b.commit(); try { sessionStorage.removeItem("nomi_pending_id"); } catch (e) {}      // 이후 members 스냅샷이 화면을 바꿔 준다
     } catch (e) { btn.disabled = false; btn.textContent = isAdmin ? "시작하기" : "가입 신청";
       toast(e.code === "permission-denied" ? "이미 쓰는 아이디이거나 규칙이 아직 게시되지 않았어요" : "실패: " + errText(e)); }
   };
@@ -155,7 +220,7 @@ function gateSignup() {
 
 async function cancelApplication() {
   const m = S.member; const b = FS.writeBatch(db);
-  b.delete(ref("members", me())); b.delete(ref("handles", m.handle)); await b.commit();
+  b.delete(ref("members", me())); b.delete(ref("handles", m.handle)); if (needsLoginDoc(S.user)) b.delete(ref("logins", m.handle)); await b.commit();
 }
 async function gatePending() {
   const m = S.member; await loadPeople([m.referrerUid]);
@@ -706,7 +771,7 @@ async function renderAdmin() {
     el.querySelectorAll("[data-adec]").forEach(b => b.onclick = async () => { await decide(u, b.dataset.adec); renderAdmin(); });
     const k = el.querySelector("[data-akick]"); if (k) k.onclick = async () => {
       const p = by.get(u); if (!await ask(`${p.displayName} (@${p.handle}) 님을 내보낼까요? 멤버 정보와 아이디가 삭제돼요. 올린 글은 남아요.`, "내보내기")) return;
-      try { const b = FS.writeBatch(db); b.delete(ref("members", u)); b.delete(ref("handles", p.handle)); await b.commit(); toast("내보냈어요"); renderAdmin(); } catch (e) { toast("실패: " + errText(e)); } };
+      try { const b = FS.writeBatch(db); b.delete(ref("members", u)); b.delete(ref("handles", p.handle)); b.delete(ref("logins", p.handle)); await b.commit(); toast("내보냈어요"); renderAdmin(); } catch (e) { toast("실패: " + errText(e)); } };
   });
 }
 
