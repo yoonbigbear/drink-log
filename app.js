@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11141200";
-import { qrCanvas } from "./qr.js?v=11141200";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11141200";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11141711";
+import { qrCanvas } from "./qr.js?v=11141711";
+import { $, esc, won, CUR, CURS, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11141711";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -422,7 +422,7 @@ function postCard(p) {
     <div class="pbody"><div class="cname" style="white-space:normal">${c.icon} ${esc(p.name)}${p.recommend ? '<span class="reco">👍 추천</span>' : ""}</div>
       <div class="cmeta" style="white-space:normal">${esc([p.subtype || p.category, p.producer, p.aging].filter(Boolean).join(" · "))}</div>
       ${p.recoLine ? `<div style="margin-top:4px;font-size:14px">“${esc(p.recoLine)}”</div>` : ""}
-      <div class="crow">${stars(p.rating) || "<span></span>"}<span class="price">${p.price ? won(p.price) + `<i> / ${esc(p.priceUnit || "잔")}</i>` : ""}</span></div>
+      <div class="crow">${stars(p.rating) || "<span></span>"}<span class="price">${p.price ? won(p.price, p.currency) + `<i> / ${esc(p.priceUnit || "잔")}</i>` : ""}</span></div>
       ${(p.tags || []).length ? `<div class="tags">${p.tags.slice(0, 5).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}</div>
     <div class="pfoot"><span>♥ ${p.likeCount || 0}</span><span>💬 ${p.commentCount || 0}</span></div></article>`;
 }
@@ -476,7 +476,7 @@ function renderMine() {
         <div class="cname">${esc(i.name)}${i.shared ? '<span class="badge">공유 중</span>' : ""}</div>
         <div class="cmeta">${icon(i)} ${esc([i.subtype || i.category, i.producer, i.aging].filter(Boolean).join(" · "))}</div>
         <div class="cmeta">📍 ${esc(i.place || "장소 미입력")} · ${esc(fmtDay(i.when))}</div>
-        <div class="crow">${stars(i.rating) || "<span></span>"}<span class="price">${i.price ? won(i.price) + `<i> / ${esc(i.priceUnit || "잔")}</i>` : ""}</span></div>
+        <div class="crow">${stars(i.rating) || "<span></span>"}<span class="price">${i.price ? won(i.price, i.currency) + `<i> / ${esc(i.priceUnit || "잔")}</i>` : ""}</span></div>
         ${(i.tags || []).length ? `<div class="tags">${i.tags.slice(0, 4).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
       </div></button>`;
   }).join("");
@@ -492,9 +492,9 @@ function placeIndex() {
   const m = new Map();
   for (const i of S.mine) {
     const k = (i.place || "").trim(); if (!k) continue;
-    let b = m.get(k); if (!b) { b = { place: k, n: 0, last: "", sum: 0, pc: 0, best: null, cats: new Set() }; m.set(k, b); }
+    let b = m.get(k); if (!b) { b = { place: k, n: 0, last: "", sums: {}, best: null, cats: new Set() }; m.set(k, b); }
     b.n++; b.cats.add(i.category); if ((i.when || "") > b.last) b.last = i.when || "";
-    if (+i.price) { b.sum += +i.price; b.pc++; }
+    if (+i.price) { const c = i.currency || "KRW", t = b.sums[c] || (b.sums[c] = [0, 0]); t[0] += +i.price; t[1]++; }
     if (b.lat == null && i.lat != null) { b.lat = i.lat; b.lng = i.lng; }
     if (!b.address && i.address) b.address = i.address; if (!b.mapLink && i.mapLink) b.mapLink = i.mapLink;
     if (i.rating && (!b.best || i.rating > b.best.rating)) b.best = i;
@@ -505,7 +505,7 @@ function renderPlaces() {
   const P = placeIndex();
   $("#places").innerHTML = P.length ? P.map(p => `<div class="place">
     <div class="pn">${esc(p.place)}<span>${p.n}잔 ${[...p.cats].map(c => (CAT[c] || CAT["기타"]).icon).join("")}</span></div>
-    <div class="pm">마지막 방문 ${esc(fmtDay(p.last))}${p.pc ? " · 평균 " + won(p.sum / p.pc) : ""}${p.address ? " · " + esc(p.address) : ""}</div>
+    <div class="pm">마지막 방문 ${esc(fmtDay(p.last))}${Object.keys(p.sums).length ? " · 평균 " + Object.entries(p.sums).map(([c, [a, n]]) => won(a / n, c)).join(" / ") : ""}${p.address ? " · " + esc(p.address) : ""}</div>
     ${p.best ? `<div class="pm">최고 평점: ${esc(p.best.name)} ${stars(p.best.rating)}</div>` : ""}
     <div class="maps">${mapLinks(p)}</div><button class="linkbtn" data-pf="${esc(p.place)}">이곳의 기록 보기 →</button></div>`).join("")
     : `<div class="empty"><div class="big">📍</div>기록에 장소를 넣으면 여기에 모여요.<br><span class="hint">장소는 내 기록에서만 모아 보여요.</span></div>`;
@@ -539,7 +539,7 @@ function renderDetail(it, kind) {
     <dl class="kv">
       ${it.rating ? `<dt>평점</dt><dd>${stars(it.rating)}</dd>` : ""}
       <dt>시간</dt><dd>${esc(fmtWhen(it.when))}</dd>
-      ${it.price ? `<dt>가격</dt><dd>${won(it.price)} / ${esc(it.priceUnit || "잔")}</dd>` : ""}
+      ${it.price ? `<dt>가격</dt><dd>${won(it.price, it.currency)} / ${esc(it.priceUnit || "잔")}</dd>` : ""}
       ${it.place ? `<dt>장소</dt><dd>${esc(it.place)}${it.address ? `<div class="dsub">${esc(it.address)}</div>` : ""}<div class="maps">${mapLinks(it)}</div></dd>` : ""}
     </dl>
     ${it.lat != null || it.address ? `<div class="minimap ${it.lat != null ? "" : "hide"}" id="d-map"></div>` : ""}
@@ -804,6 +804,7 @@ function openForm(it, pre) {
     photos: (it?.photos || []).map(p => ({ ...p })), removed: [], origFirstId: it?.photos?.[0]?.id || null, origThumb: it?.thumb || "", tags: new Set(it?.tags || []), rating: it?.rating || 0,
     whenTouched: !!it, prevNote: it?.note || "", prevNoteShared: it?.shareOpts?.note ?? true, loc: { lat: d.lat ?? null, lng: d.lng ?? null, mapLink: d.mapLink || "", place: d.place || "", address: d.address || "" }, cat: d.category || S.mine[0]?.category || "위스키", 
     share: !!it?.shared, sPrice: o.price ?? false, sPlace: o.place || "name", sNote: o.note ?? true, reco: !!d.recommend };
+  const cur0 = CUR[d.currency] ? d.currency : (() => { try { const c = localStorage.getItem("nomi_cur"); if (CUR[c]) return c; } catch (e) {} return { ja: "JPY", en: "USD" }[window.LANG] || "KRW"; })();
   const recent = placeIndex().slice(0, 10);
   nav(() => {}, {});  // 스택에 자리만 잡고 아래에서 내용을 그린다
   stack[stack.length - 1].fn = () => { if (F) return; };
@@ -827,7 +828,7 @@ function openForm(it, pre) {
     </fieldset>
     <fieldset><legend>시간 · 가격</legend>
       <label>마신 시간</label><input class="inp" type="datetime-local" id="f-when" value="${esc(d.when || nowLocal())}">
-      <div class="row"><div><label>가격 (원)</label><input class="inp" id="f-price" inputmode="numeric" value="${esc(d.price ?? "")}" placeholder="25000"></div>
+      <div class="row"><div><label>가격</label><div class="pricein"><select class="inp" id="f-cur" data-noi18n>${CURS.map(c => `<option value="${c}" ${cur0 === c ? "selected" : ""}>${CUR[c].sym} ${c}</option>`).join("")}</select><input class="inp" id="f-price" inputmode="decimal" value="${esc(d.price ?? "")}" placeholder="${CUR[cur0].ph}"></div></div>
         <div><label>기준</label><select class="inp" id="f-unit">${[...new Set([...(d.priceUnit ? [d.priceUnit] : []), ...UNITS])].map(u => `<option ${(d.priceUnit || "잔") === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></div></div>
     </fieldset>
     <fieldset><legend>향 · 맛</legend><div class="chips" id="aromas"></div>
@@ -868,6 +869,7 @@ function openForm(it, pre) {
   if ($("#recent")) $("#recent").onclick = e => { const c = e.target.closest("[data-i]"); if (!c) return; const b = recent[+c.dataset.i];
     $("#f-place").value = b.place; $("#f-address").value = b.address || ""; };
   bindMentionSuggest();
+  $("#f-cur").onchange = e => { $("#f-price").placeholder = CUR[e.target.value].ph; try { localStorage.setItem("nomi_cur", e.target.value); } catch (x) {} };
   $("#f-gmap").onclick = () => { const q = ($("#f-place").value.trim() + " " + $("#f-address").value.trim()).trim(); if (!q) return toast("장소 이름이나 주소를 먼저 적어 주세요");
     window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q), "_blank", "noopener"); };
   if ($("#f-del")) $("#f-del").onclick = async () => { if (await ask(`“${it.name}” 기록을 삭제할까요? 사진과 공유한 글도 함께 지워져요.`, "삭제")) { const x = it; F = null; await deleteLog(x); } };
@@ -931,7 +933,7 @@ async function addPhoto(f) {
 
 /* ── 저장 · 삭제 ── */
 async function cancelForm() { F = null; back(); }
-const num = s => { const v = String(s ?? "").replace(/[,\s₩원%]/g, ""); if (v === "") return null; const n = parseFloat(v); return isFinite(n) ? n : null; };
+const num = s => { const v = String(s ?? "").replace(/[,\s₩원¥円$%]/g, ""); if (v === "") return null; const n = parseFloat(v); return isFinite(n) ? n : null; };
 // 내 원본 기록 → 공유 게시물(고른 항목만)
 function projection(l, uid) {
   const o = l.shareOpts, del = FS.deleteField();
@@ -939,7 +941,7 @@ function projection(l, uid) {
     when: l.when, tags: l.tags, nose: l.nose, palate: l.palate, finish: l.finish, rating: l.rating, recommend: l.recommend, recoLine: l.recoLine,
     photos: l.photos, thumb: l.thumb || "", createdAt: l.createdAt, updatedAt: l.updatedAt,
     note: o.note ? l.note : "",
-    price: o.price && l.price != null ? l.price : del, priceUnit: o.price && l.price != null ? l.priceUnit : del,
+    price: o.price && l.price != null ? l.price : del, priceUnit: o.price && l.price != null ? l.priceUnit : del, currency: o.price && l.price != null ? (l.currency || "KRW") : del,
     place: o.place !== "none" && l.place ? l.place : del,
     address: o.place === "exact" && l.address ? l.address : del,
     lat: o.place === "exact" && l.lat != null ? l.lat : del, lng: o.place === "exact" && l.lat != null ? l.lng : del,
@@ -964,7 +966,7 @@ async function save() {
     }
     const log = { category: F.cat, name, subtype: v("#f-subtype"), producer: v("#f-producer"), origin: v("#f-origin"), aging: v("#f-aging"), abv: num(v("#f-abv")), detail: v("#f-detail"),
       place: v("#f-place"), address: v("#f-address"), lat: same ? F.loc.lat : gpsOk ? F.gps.lat : null, lng: same ? F.loc.lng : gpsOk ? F.gps.lng : null, mapLink: same ? F.loc.mapLink : "",
-      when: v("#f-when") || nowLocal(), price: num(v("#f-price")), priceUnit: v("#f-unit"), tags: [...F.tags], nose: v("#f-nose"), palate: v("#f-palate"), finish: v("#f-finish"), note: v("#f-note"),
+      when: v("#f-when") || nowLocal(), price: num(v("#f-price")), priceUnit: v("#f-unit"), currency: v("#f-cur"), tags: [...F.tags], nose: v("#f-nose"), palate: v("#f-palate"), finish: v("#f-finish"), note: v("#f-note"),
       rating: F.rating || 0, photos, thumb, recommend: !!$("#f-reco").checked, recoLine: v("#f-recoline"),
       shared: F.share, shareOpts: { price: $("#f-sprice").checked, place: $("#f-splace").value, note: $("#f-snote").checked },
       createdAt: F.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };

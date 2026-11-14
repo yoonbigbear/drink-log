@@ -1,7 +1,9 @@
 // 화면과 상관없는 도우미 모음.
 export const $ = s => document.querySelector(s);
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-export const won = n => "₩" + Math.round(n).toLocaleString("ko-KR");
+export const CUR = { KRW: { sym: "₩", dp: 0, ph: "25000" }, JPY: { sym: "¥", dp: 0, ph: "2500" }, USD: { sym: "$", dp: 2, ph: "18" } };
+export const CURS = ["KRW", "JPY", "USD"];
+export const won = (n, c = "KRW") => { const k = CUR[c] || CUR.KRW; return k.sym + (+n).toLocaleString("en-US", { maximumFractionDigits: k.dp, minimumFractionDigits: 0 }); };
 export const initial = s => (String(s || "?").trim()[0] || "?").toUpperCase();
 export const rid = () => Math.random().toString(36).slice(2, 12);
 

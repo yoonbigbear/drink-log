@@ -201,3 +201,4 @@ nav .tab{position:relative}
 .guestcard{cursor:pointer}.lockbox{margin:14px 0;padding:12px;border:1px dashed var(--line);border-radius:12px;text-align:center;color:var(--muted);font-size:13px;line-height:1.5}
 .ratepick button.half{background:linear-gradient(90deg,var(--amber2) 50%,var(--line) 50%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .langsel{max-width:220px}
+.pricein{display:flex;gap:6px}.pricein select{width:96px;flex:none}.pricein input{flex:1;min-width:0}
