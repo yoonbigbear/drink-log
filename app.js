@@ -1,7 +1,7 @@
 // 飲みログ — 초대제 술 기록 SNS. 데이터 모델과 보안 규칙은 firestore.rules 상단 주석 참고.
-import { A, FS, auth, db, OWNER } from "./fb.js?v=11140039";
-import { qrCanvas } from "./qr.js?v=11140039";
-import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11140039";
+import { A, FS, auth, db, OWNER } from "./fb.js?v=11141200";
+import { qrCanvas } from "./qr.js?v=11141200";
+import { $, esc, won, initial, rid, nowLocal, fmtWhen, fmtDay, ago, stars, toast, ask, mapLinks, loadImg, toDataUrl, thumbFromData, THUMB, FULL, readExif } from "./util.js?v=11141200";
 
 const CATS = window.CATEGORIES;
 const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
@@ -119,6 +119,9 @@ function boundId(u) {
 }
 const logout = () => A.signOut(auth);
 
+const TR = s => window.TR(s);
+const langSel = id => `<select class="inp langsel" id="${id}" data-noi18n aria-label="Language">${[["ko", "한국어"], ["ja", "日本語"], ["en", "English"]].map(([v, n]) => `<option value="${v}" ${window.LANG === v ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+const bindLang = id => { const e = $("#" + id); if (e) e.onchange = () => window.setLang(e.value); };
 function gateLanding() {
   showGate(`<div class="glogo">🥃</div><h1>飲みログ</h1>
     <p class="gsub" style="text-align:center">마신 술을 사진·장소·향·가격과 함께 기록하고,<br>취향이 맞는 사람들과 나누는 초대제 모임</p>
@@ -130,8 +133,9 @@ function gateLanding() {
     <div class="row" style="margin-top:8px"><button class="btn pri" id="e-login">로그인</button><button class="btn" id="e-signup">아이디로 가입</button></div>
     <button class="linkbtn" id="e-reset" type="button">비밀번호를 잊으셨나요?</button>
     <p class="hint" style="margin-top:12px">가입은 기존 멤버의 승인이 필요해요.${REF0 ? `<br><b>@${esc(REF0)}</b> 님의 초대로 오셨네요.` : ""}</p>
-    <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}`);
-  loginBtn(); idAuth(); bindQr($("#gate"), "qr-gate"); $("#g-guest").onclick = gateGuest;
+    <div class="sec">앱 주소 QR</div>${qrBlock("qr-gate")}
+    <div class="sec">🌐 Language</div>${langSel("lang-gate")}`);
+  loginBtn(); idAuth(); bindQr($("#gate"), "qr-gate"); $("#g-guest").onclick = gateGuest; bindLang("lang-gate");
 }
 // 게스트: 로그인 없이 최근 공유 글 몇 개만 맛보기로 보여주고, 나머지는 가입으로 유도한다.
 async function gateGuest() {
@@ -232,7 +236,7 @@ async function gatePending() {
     <button class="btn ghost" id="g-out">로그아웃</button>`);
   $("#g-out").onclick = logout;
   $("#g-copy").onclick = async () => {
-    const t = `飲みログ 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.\n${location.href.split("#")[0]}`;
+    const t = TR(`飲みログ 가입 승인 부탁드려요! 앱을 열고 [나] 탭에서 가입 요청을 승인해 주세요. 제 아이디는 @${m.handle} 예요.`) + "\n" + location.href.split("#")[0];
     try { await navigator.clipboard.writeText(t); toast("복사했어요. 메신저에 붙여 넣으세요"); } catch (e) { toast("복사하지 못했어요"); }
   };
   $("#g-cancel").onclick = async () => { if (await ask("가입 신청을 취소할까요?", "취소하기")) { try { await cancelApplication(); } catch (e) { toast("실패: " + errText(e)); } } };
@@ -354,7 +358,7 @@ function attachMessages() {
   if (!chatView || chatUn) return; const { id } = chatView;
   chatUn = FS.onSnapshot(FS.query(col("chats", id, "messages"), FS.orderBy("createdAt", "desc"), FS.limit(100)), snap => {
     const el = $("#msgs"); if (!el || !chatView) return; const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
-    el.innerHTML = rows.map(m => `<div class="bub ${m.from === me() ? "me" : "them"}">${esc(m.text).replace(/\n/g, "<br>")}<span>${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) : ""}</span></div>`).join("") || `<div class="hint">첫 쪽지를 보내 보세요.</div>`;
+    el.innerHTML = rows.map(m => `<div class="bub ${m.from === me() ? "me" : "them"}" data-noi18n>${esc(m.text).replace(/\n/g, "<br>")}<span>${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString(window.LOCALE, { hour: "numeric", minute: "2-digit" }) : ""}</span></div>`).join("") || `<div class="hint">첫 쪽지를 보내 보세요.</div>`;
     el.scrollTop = el.scrollHeight; sheet.scrollTop = sheet.scrollHeight; markChatRead();
   }, e => { const el = $("#msgs"); if (el) el.innerHTML = `<div class="err">불러오지 못했어요: ${errText(e)}</div>`; });
 }
@@ -522,7 +526,7 @@ function renderDetail(it, kind) {
   const isMine = kind === "mine" || it.ownerUid === me();
   const owner = it.ownerUid || me();
   const social = kind === "post" || (kind === "mine" && it.shared);
-  const note = (t, v) => v ? `<div class="note"><h4>${t}</h4><p>${esc(v)}</p></div>` : "";
+  const note = (t, v) => v ? `<div class="note"><h4>${t}</h4><p data-noi18n>${esc(v)}</p></div>` : "";
   sheet.innerHTML = `${bar("", isMine ? `<button class="btn" id="d-edit">수정</button>` : "")}
   <div class="sbody">
     ${kind === "post" ? `<div class="phead" style="padding:0 0 12px">${avatar(owner)}<div class="pi" data-prof="${esc(owner)}" style="flex:1;min-width:0;cursor:pointer"><b>${esc(pname(owner))}</b><div class="dim sm">@${esc(phandle(owner))} · ${esc(ago(it.when))}</div></div>${isMine ? "" : followBtn(owner)}</div>` : ""}
@@ -538,7 +542,7 @@ function renderDetail(it, kind) {
       ${it.price ? `<dt>가격</dt><dd>${won(it.price)} / ${esc(it.priceUnit || "잔")}</dd>` : ""}
       ${it.place ? `<dt>장소</dt><dd>${esc(it.place)}${it.address ? `<div class="dsub">${esc(it.address)}</div>` : ""}<div class="maps">${mapLinks(it)}</div></dd>` : ""}
     </dl>
-    ${it.lat != null || it.place || it.address ? `<div class="minimap" id="d-map"></div>` : ""}
+    ${it.lat != null || it.address ? `<div class="minimap ${it.lat != null ? "" : "hide"}" id="d-map"></div>` : ""}
     ${(it.tags || []).length ? `<div class="tags" style="margin:12px 0">${it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
     ${note("향 (노즈)", it.nose)}${note("맛 (팔레트)", it.palate)}${note("여운 (피니시)", it.finish)}${note("경험 · 메모", it.note)}
     ${social ? `<div class="sec">좋아요 · 댓글</div><div class="social" id="social"><div class="hint">불러오는 중…</div></div>` : ""}
@@ -547,7 +551,8 @@ function renderDetail(it, kind) {
   $("#s-back").onclick = back;
   linkMentions(sheet);
   sheet.querySelectorAll(".gallery img[data-pid]").forEach(async img => { try { const d = await fullPhoto(img.dataset.pid); if (d && img.isConnected) img.src = d; } catch (e) {} });
-  { const el = $("#d-map"); const q = it.lat != null ? `${it.lat},${it.lng}` : `${it.place || ""} ${it.address || ""}`.trim(); if (el && q) el.innerHTML = `<iframe class="gmap" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${encodeURIComponent(q)}&z=16&output=embed"></iframe>`; }
+  { const el = $("#d-map"); const show = (la, lo) => { if (el.isConnected) { el.classList.remove("hide"); el.innerHTML = `<iframe class="gmap" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${la},${lo}&z=16&output=embed"></iframe>`; } };
+    if (el) { if (it.lat != null) show(it.lat, it.lng); else if (it.address) geocode(it.address).then(c => { if (c) show(c.lat, c.lng); }); } }
   const prof = sheet.querySelector("[data-prof]"); if (prof) prof.onclick = () => nav(() => renderProfile(owner));
   bindFollow();
   if (isMine) {
@@ -613,7 +618,7 @@ function syncCounts() { const p = S.feed.find(x => x.id === D.id); if (p) { p.li
 function renderSocial() {
   const box = $("#social"); if (!box || !D) return;
   box.innerHTML = `<div class="likerow"><button class="likebtn ${D.liked ? "on" : ""}" id="s-like">${D.liked ? "♥" : "♡"} ${D.likeCount}</button><span class="dim">💬 ${D.commentCount}</span></div>
-    ${D.comments.map(c => `<div class="comment"><span data-cprof="${esc(c.authorUid)}" style="cursor:pointer">${avatar(c.authorUid)}</span><div class="ct"><div class="cn"><b data-cprof="${esc(c.authorUid)}" style="cursor:pointer;text-decoration:underline dotted">${esc(pname(c.authorUid))}</b> · ${esc(c.createdAt?.toDate ? ago(c.createdAt.toDate()) : "방금")}</div><p>${esc(c.text)}</p></div>${c.authorUid === me() || D.ownerUid === me() ? `<button class="del" data-cdel="${esc(c.id)}">삭제</button>` : ""}</div>`).join("")}
+    ${D.comments.map(c => `<div class="comment"><span data-cprof="${esc(c.authorUid)}" style="cursor:pointer">${avatar(c.authorUid)}</span><div class="ct"><div class="cn"><b data-cprof="${esc(c.authorUid)}" style="cursor:pointer;text-decoration:underline dotted">${esc(pname(c.authorUid))}</b> · ${esc(c.createdAt?.toDate ? ago(c.createdAt.toDate()) : "방금")}</div><p data-noi18n>${esc(c.text)}</p></div>${c.authorUid === me() || D.ownerUid === me() ? `<button class="del" data-cdel="${esc(c.id)}">삭제</button>` : ""}</div>`).join("")}
     <div class="cinput"><input class="inp" id="s-text" maxlength="500" placeholder="댓글 달기…"><button class="btn pri" id="s-send">등록</button></div>`;
   $("#s-like").onclick = async () => {
     const was = D.liked; const b = FS.writeBatch(db); const lr = ref("posts", D.id, "likes", me()), pr = ref("posts", D.id);
@@ -702,8 +707,8 @@ function qrBlock(id) { return `<div class="qrbox"><img id="${id}" class="qrcv" a
 function bindQr(root, id) {
   const cv = $("#" + id), url = appUrl(); const c = qrCanvas(url, 8);
   if (c) cv.src = c.toDataURL("image/png"); else cv.replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "QR을 만들 수 없어요" }));
-  const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt("복사해서 사용하세요", t); } };
-  const invite = () => `飲みログ에 초대해요 🥃\n${url}` + (S.member?.handle ? `\n추천인 아이디: @${S.member.handle}` : "");
+  const copyText = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch { prompt(TR("복사해서 사용하세요"), t); } };
+  const invite = () => TR("飲みログ에 초대해요 🥃") + "\n" + url + (S.member?.handle ? "\n" + TR(`추천인 아이디: @${S.member.handle}`) : "");
   const png = () => new Promise(r => c.toBlob(r, "image/png"));
   root.querySelectorAll("[data-qr]").forEach(b => b.onclick = async () => {
     const k = b.dataset.qr;
@@ -732,9 +737,11 @@ function renderMe() {
     ${act.length ? act.map(personRow).join("") : `<div class="hint">아직 없어요. 친구가 가입할 때 내 아이디 <b>@${esc(m.handle)}</b>를 추천인으로 적으면, 여기서 승인할 수 있어요.</div>`}
     <div class="sec">내 추천인</div><div class="hint" id="me-ref">${m.referrerUid ? "불러오는 중…" : "첫 멤버(관리자)예요."}</div>
     ${S.user.uid === OWNER ? `<div class="sec">관리자</div><button class="btn" id="me-admin" style="width:100%">👑 멤버 관리</button>` : ""}
+    <div class="sec">🌐 Language</div>${langSel("lang-me")}
     <div class="sec">계정</div><button class="btn danger" id="me-out" style="width:100%">로그아웃</button>`;
   bindQr(el, "qr-me");
   if ($("#me-admin")) $("#me-admin").onclick = () => nav(renderAdmin, { admin: true });
+  bindLang("lang-me");
   $("#me-out").onclick = logout;
   $("#me-edit").onclick = () => nav(renderEditProfile);
   $("#me-view").onclick = () => nav(() => renderProfile(me()));
@@ -748,7 +755,7 @@ function renderMe() {
 }
 /* ───────────── 관리자: 멤버 관리 ───────────── */
 const STAT = { active: "멤버", pending: "승인 대기", rejected: "거절됨" };
-const dstr = t => t?.toDate ? t.toDate().toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" }) : "–";
+const dstr = t => t?.toDate ? t.toDate().toLocaleDateString(window.LOCALE, { year: "2-digit", month: "numeric", day: "numeric" }) : "–";
 async function renderAdmin() {
   sheet.innerHTML = `${bar("멤버 관리")}<div class="sbody"><div class="hint">불러오는 중…</div></div>`; $("#s-back").onclick = back;
   let rows;
@@ -816,7 +823,7 @@ function openForm(it, pre) {
       <label>장소 이름</label><input class="inp" id="f-place" value="${esc(d.place)}" placeholder="바, 식당, 양조장, 집…">
       <label>주소 (선택)</label><input class="inp" id="f-address" value="${esc(d.address)}" placeholder="도로명 주소나 동네 (예: 서울 강남구 논현동)">
       <div class="locbtns"><button type="button" class="btn" id="f-gmap">구글맵에서 찾아보기 ↗</button></div>
-      <div class="hint">장소 이름과 주소로 구글맵에서 위치를 보여줘요. 이름만 적어도 돼요.</div>
+      <div class="hint">주소를 적으면 기록에 지도가 함께 보여요. 주소를 찾지 못하면 지도 없이 구글맵 검색 링크만 보여요.</div>
     </fieldset>
     <fieldset><legend>시간 · 가격</legend>
       <label>마신 시간</label><input class="inp" type="datetime-local" id="f-when" value="${esc(d.when || nowLocal())}">
@@ -867,7 +874,7 @@ function openForm(it, pre) {
 }
 function applyCat() {
   const c = CAT[F.cat] || CAT["기타"]; $("#l-producer").textContent = c.producer || "생산자"; $("#l-aging").textContent = c.aging || "빈티지 · 숙성";
-  $("#l-detail").textContent = c.detail || "세부 정보"; $("#f-detail").placeholder = c.detailPh || ""; $("#dl-sub").innerHTML = (c.subs || []).map(s => `<option value="${esc(s)}">`).join(""); renderAromas();
+  $("#l-detail").textContent = c.detail || "세부 정보"; $("#f-detail").placeholder = c.detailPh || ""; $("#dl-sub").innerHTML = (c.subs || []).map(s => `<option value="${esc(TR(s))}">`).join(""); renderAromas();
 }
 function renderAromas() { const c = CAT[F.cat] || CAT["기타"]; const list = [...new Set([...(c.aromas || []), ...F.tags])];
   $("#aromas").innerHTML = list.map(a => `<button type="button" class="chip ${F.tags.has(a) ? "on" : ""}" data-t="${esc(a)}">${esc(a)}</button>`).join(""); }
@@ -887,18 +894,27 @@ function renderPhotos() {
   const a = $("#addph"); if (a) a.onclick = () => $("#file").click();
 }
 $("#file").onchange = async e => { const files = [...e.target.files]; e.target.value = ""; for (const f of files) { if (!F || F.photos.length >= 6) break; await addPhoto(f); } };
+// 주소 → 좌표 (찾지 못하면 null). 지도를 엉뚱한 곳으로 보여주지 않으려고, 위치가 확인될 때만 지도를 그린다.
+const geoCache = new Map();
+async function geocode(q) {
+  q = String(q || "").trim(); if (!q) return null; if (geoCache.has(q)) return geoCache.get(q);
+  let out = null;
+  try { const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" + encodeURIComponent(q)); const j = await r.json();
+    if (Array.isArray(j) && j[0] && isFinite(+j[0].lat) && isFinite(+j[0].lon)) out = { lat: +(+j[0].lat).toFixed(6), lng: +(+j[0].lon).toFixed(6) }; } catch (e) { return null; }
+  geoCache.set(q, out); return out;
+}
 // 사진에 GPS 위치가 있으면 주소(와 장소 이름)를 비어 있는 칸에 자동으로 채운다.
 async function fillAddressFromGps(lat, lng, myF) {
   if (myF.gpsTried) return; myF.gpsTried = true;
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=ko&lat=${lat}&lon=${lng}`); const j = await r.json();
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=${window.LANG}&lat=${lat}&lon=${lng}`); const j = await r.json();
     if (F !== myF || !j || j.error) return;
     const parts = String(j.display_name || "").split(",").map(x => x.trim()).filter(x => x && !/^\d{3,}(-\d+)?$/.test(x));
     if (parts.length > 1) parts.pop();   // 맨 끝의 나라 이름
     if (parts.length > 1 && j.name && parts[0] === j.name) parts.shift();   // 장소 이름은 주소에서 뺀다
     const addr = parts.slice().reverse().join(" "); if (!addr) return;
     const ad = $("#f-address"), pl = $("#f-place"); let did = false;
-    if (ad && !ad.value.trim()) { ad.value = addr; did = true; }
+    if (ad && !ad.value.trim()) { ad.value = addr; did = true; myF.gps = { lat, lng, addr }; }
     if (pl && !pl.value.trim() && j.name && j.category !== "highway" && j.category !== "place") { pl.value = j.name; did = true; }
     if (did) toast("사진의 위치로 주소를 채웠어요 📍");
   } catch (e) {}
@@ -935,7 +951,7 @@ async function save() {
   if (F.photos.some(p => p.busy)) return toast("사진 처리가 끝나면 저장할 수 있어요");
   if (!F.photos.length) return toast("사진을 한 장 이상 올려 주세요 📷");
   const v = id => $(id).value.trim(); const name = v("#f-name"); if (!name) { toast("이름을 입력해 주세요"); $("#f-name").focus(); return; }
-  const uid = me(); const same = v("#f-place") === F.loc.place && v("#f-address") === F.loc.address;
+  const uid = me(); const same = v("#f-place") === F.loc.place && v("#f-address") === F.loc.address; const gpsOk = !!F.gps && v("#f-address") === F.gps.addr;
   const id = F.id || FS.doc(col("private", uid, "logs")).id; const btn = $("#f-save"); btn.disabled = true; btn.textContent = "저장 중…";
   try {
     const photos = F.photos.map(p => ({ id: p.id }));
@@ -947,7 +963,7 @@ async function save() {
       else { const d = await fullPhoto(first.id); thumb = d ? await thumbFromData(d) : ""; }
     }
     const log = { category: F.cat, name, subtype: v("#f-subtype"), producer: v("#f-producer"), origin: v("#f-origin"), aging: v("#f-aging"), abv: num(v("#f-abv")), detail: v("#f-detail"),
-      place: v("#f-place"), address: v("#f-address"), lat: same ? F.loc.lat : null, lng: same ? F.loc.lng : null, mapLink: same ? F.loc.mapLink : "",
+      place: v("#f-place"), address: v("#f-address"), lat: same ? F.loc.lat : gpsOk ? F.gps.lat : null, lng: same ? F.loc.lng : gpsOk ? F.gps.lng : null, mapLink: same ? F.loc.mapLink : "",
       when: v("#f-when") || nowLocal(), price: num(v("#f-price")), priceUnit: v("#f-unit"), tags: [...F.tags], nose: v("#f-nose"), palate: v("#f-palate"), finish: v("#f-finish"), note: v("#f-note"),
       rating: F.rating || 0, photos, thumb, recommend: !!$("#f-reco").checked, recoLine: v("#f-recoline"),
       shared: F.share, shareOpts: { price: $("#f-sprice").checked, place: $("#f-splace").value, note: $("#f-snote").checked },

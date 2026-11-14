@@ -6,17 +6,22 @@ export const initial = s => (String(s || "?").trim()[0] || "?").toUpperCase();
 export const rid = () => Math.random().toString(36).slice(2, 12);
 
 export function nowLocal() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+const LG = () => window.LANG || "ko";
 export function fmtWhen(w) {
   if (!w) return ""; const d = new Date(w); if (isNaN(d)) return w; const p = n => String(n).padStart(2, "0");
-  return `${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + "년 " : ""}${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]}) ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const yr = d.getFullYear() !== new Date().getFullYear(), hm = `${p(d.getHours())}:${p(d.getMinutes())}`, L = LG();
+  if (L === "ja") return `${yr ? d.getFullYear() + "年" : ""}${d.getMonth() + 1}月${d.getDate()}日(${"日月火水木金土"[d.getDay()]}) ${hm}`;
+  if (L === "en") return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getDate()}${yr ? ", " + d.getFullYear() : ""} (${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]}) ${hm}`;
+  return `${yr ? d.getFullYear() + "년 " : ""}${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]}) ${hm}`;
 }
 export function fmtDay(w) { if (!w) return ""; const d = new Date(w); return isNaN(d) ? w : `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`; }
 export function ago(w) {
-  const d = new Date(w); if (isNaN(d)) return ""; const s = (Date.now() - d) / 1000;
-  if (s < 0) return fmtDay(w); if (s < 3600) return Math.max(1, Math.round(s / 60)) + "분 전";
-  if (s < 86400) return Math.round(s / 3600) + "시간 전"; if (s < 86400 * 7) return Math.round(s / 86400) + "일 전"; return fmtDay(w);
+  const d = new Date(w); if (isNaN(d)) return ""; const s = (Date.now() - d) / 1000; if (s < 0) return fmtDay(w);
+  const U = { ko: ["분 전", "시간 전", "일 전"], ja: ["分前", "時間前", "日前"], en: ["m ago", "h ago", "d ago"] }[LG()];
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + U[0];
+  if (s < 86400) return Math.round(s / 3600) + U[1]; if (s < 86400 * 7) return Math.round(s / 86400) + U[2]; return fmtDay(w);
 }
-export function stars(r) { r = Math.round((+r || 0) * 2) / 2; return r ? `<span class="stars" title="${r}점"><span class="off">★★★★★</span><span class="fill" style="width:${r * 20}%">★★★★★</span></span><span class="starn">${r}</span>` : ""; }
+export function stars(r) { r = Math.round((+r || 0) * 2) / 2; return r ? `<span class="stars" title="${r} / 5"><span class="off">★★★★★</span><span class="fill" style="width:${r * 20}%">★★★★★</span></span><span class="starn">${r}</span>` : ""; }
 
 let toastT;
 export function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
@@ -37,7 +42,7 @@ export function parseCoord(s) {
 export function mapLinks(it) {
   const nm = it.place || it.name || ""; const has = it.lat != null && it.lng != null; const L = [];
   if (has) { L.push(["구글맵", `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lng}`]); }
-  else if (it.place) { const q = encodeURIComponent((it.place + " " + (it.address || "")).trim()); L.push(["구글맵 검색", `https://www.google.com/maps/search/?api=1&query=${q}`]); }
+  else if (it.place || it.address) { const q = encodeURIComponent(((it.place || "") + " " + (it.address || "")).trim()); L.push(["구글맵 검색", `https://www.google.com/maps/search/?api=1&query=${q}`]); }
   if (it.mapLink && /^https?:\/\//i.test(it.mapLink)) L.push(["저장한 링크", it.mapLink]);
   return L.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${t} ↗</a>`).join("");
 }
